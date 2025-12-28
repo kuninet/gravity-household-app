@@ -22,6 +22,7 @@ app.use('/api/analysis', require('./routes/analysis'));
 app.use('/api/fixed_costs', require('./routes/fixed_costs'));
 app.use('/api/import', require('./routes/import'));
 app.use('/api/ocr', require('./routes/ocr'));
+app.use('/api/backup', require('./routes/backup'));
 
 // Health check
 app.get('/api/health', (req, res) => {
