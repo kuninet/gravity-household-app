@@ -13,6 +13,12 @@ const categories = [
     { code: 500, name: '医療費', group: '医療費' },
     { code: 900, name: 'その他', group: 'その他' },
     { code: 901, name: '小遣い', group: 'その他' },
+    // Income
+    { code: 700, name: '給与', group: '収入' },
+    { code: 701, name: 'ボーナス', group: '収入' },
+    { code: 702, name: '年金', group: '収入' },
+    { code: 703, name: '配当・利息', group: '収入' },
+    { code: 704, name: 'その他収入', group: '収入' },
     // Fixed Costs
     { code: 600, name: '家賃・光熱費', group: '固定費' }, // General category? User might not use this if specific ones exist. Using 604 for Rent.
     { code: 601, name: '電気', group: '固定費' },
