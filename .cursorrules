@@ -1,0 +1,8 @@
+# AI Agent Rules
+
+## Language Settings
+- **Think Process & Logs**: All reasoning, task summaries (`TaskBoundary`), and commit messages must be written in **Japanese**.
+- **User Communication**: Respond in **Japanese**.
+
+## Behavior
+- Always check this file for project-specific conventions.

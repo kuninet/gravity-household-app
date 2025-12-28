@@ -1,0 +1,15 @@
+{
+  "name": "household-account-app",
+  "version": "1.0.0",
+  "description": "Household Account App (Vue + Express)",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && node app.js",
+    "client": "cd client && npm run dev",
+    "setup": "npm install && cd server && npm install && cd ../client && npm install",
+    "seed": "node server/seed.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
