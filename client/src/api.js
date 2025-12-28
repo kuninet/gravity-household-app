@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:3000/api';
+const API_BASE = '/api';
 
 export async function fetchTransactions(month) {
     let url = `${API_BASE}/transactions`;
