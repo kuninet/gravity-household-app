@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { createTransaction, fetchCategories, fetchTransactions } from '../api'
 import ReceiptSplitter from './ReceiptSplitter.vue'
+import ReceiptOCR from './ReceiptOCR.vue'
 
 // Props to notify parent of updates
 const emit = defineEmits(['transaction-added'])
@@ -19,6 +20,7 @@ const form = ref({
 const recentTransactions = ref([])
 const isSubmitting = ref(false)
 const showSplitter = ref(false)
+const showOCR = ref(false)
 
 // Splitter State (for re-edit)
 const splitterState = ref({
@@ -54,7 +56,9 @@ const submit = async () => {
   isSubmitting.value = true
   try {
     // 1. Submit main transaction (calculated amount)
-    await createTransaction(form.value)
+    if (form.value.amount > 0) {
+        await createTransaction(form.value)
+    }
 
     // 2. Submit Splitter Items (if any)
     if (splitterState.value.items.length > 0) {
@@ -128,11 +132,49 @@ const applySplitter = (result) => {
     splitterState.value.total = result.total
     splitterState.value.items = result.items
 }
+
+// OCR
+const openOCR = () => {
+    showOCR.value = true
+}
+
+const applyOCR = (result) => {
+    // Treat OCR items as splitter items for multi-record flexibility?
+    // result: { amount, total, items }
+    // User requested "List display, correct, and bulk input".
+    // So mapping to splitterState is perfect.
+    
+    form.value.amount = result.amount // Should be 0 if all are in items? Or remaining?
+    // Using splitter logic, amount is the "Main" part.
+    // If OCR returns everything as "items", then amount is 0.
+    // But the user still needs to pick a Main Category in the form for the "Main" transaction.
+    // However, if amount is 0, we shouldn't create a main transaction with 0 amount ideally.
+    // But our API might allow 0? Or we should block it.
+    // Let's assume user might want to put ONE item as main.
+    // FOR NOW: Let's dump everything into items and set main input to 0, 
+    // user can manually move one out or we just support 0 amount main tx? 
+    // Actually, createTransaction (main) requires amount > 0 usually.
+    // Let's update `submit` to skip main if amount is 0/empty.
+    
+    splitterState.value.total = result.total // Just for reference
+    splitterState.value.items = result.items 
+    
+    // If OCR found items, let's open Splitter automatically?
+    // Or just show the badge like we do.
+    // User said "List display". Splitter modal does that but only when open.
+    // Maybe we should open Splitter after OCR if items exist?
+    // No, let's stick to simple state update first.
+}
 </script>
 
 <template>
   <div class="bg-white p-4 rounded shadow mb-6">
-    <h2 class="text-xl font-bold mb-4">新規入力</h2>
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold">新規入力</h2>
+        <button type="button" @click="openOCR" class="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1 rounded text-sm font-bold flex items-center">
+            <span class="mr-1">📷</span> レシート読取 (AI)
+        </button>
+    </div>
     
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- Form Area -->
@@ -165,13 +207,16 @@ const applySplitter = (result) => {
                 <div>
                     <label class="block text-sm font-bold">金額</label>
                     <div class="flex space-x-2">
-                        <input type="number" v-model="form.amount" class="border p-2 w-full rounded" required placeholder="0">
+                        <input type="number" v-model="form.amount" class="border p-2 w-full rounded" :required="splitterState.items.length === 0" placeholder="0">
                         <button type="button" @click="openSplitter" class="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 p-2 rounded text-xs font-bold whitespace-nowrap" title="レシート内訳計算">
                             内訳
                             <span v-if="splitterState.items.length > 0" class="ml-1 bg-yellow-600 text-white rounded-full px-1.5 py-0.5 text-[10px]">
                                 +{{ splitterState.items.length }}
                             </span>
                         </button>
+                    </div>
+                    <div v-if="splitterState.total" class="text-xs text-gray-500 mt-1 text-right">
+                        レシート合計: <span class="font-bold">¥{{ Number(splitterState.total).toLocaleString() }}</span>
                     </div>
                 </div>
                 <div>
@@ -218,6 +263,14 @@ const applySplitter = (result) => {
         :initial-items="splitterState.items"
         @close="showSplitter = false"
         @apply="applySplitter"
+    />
+
+    <!-- OCR Modal -->
+    <ReceiptOCR 
+        :show="showOCR" 
+        :categories="categories"
+        @close="showOCR = false"
+        @apply="applyOCR"
     />
   </div>
 </template>
