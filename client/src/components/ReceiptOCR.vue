@@ -18,6 +18,7 @@ const items = ref([]) // { id, description, amount, category_code, taxType }
 const totalAmount = ref(0)
 let nextId = 1
 
+const taxMode = ref('INCLUDED') // INCLUDED or EXCLUDED
 const isDragging = ref(false)
 
 const onFileChange = (e) => {
@@ -50,13 +51,29 @@ const analyze = async () => {
         
         // Map to internal format
         if (data.items) {
-            items.value = data.items.map(item => ({
-                id: nextId++,
-                description: item.description,
-                amount: item.amount,
-                category_code: 100, // Default to Food (100) or check logic
-                taxType: 'INCLUDED' // Default to included
-            }))
+            items.value = data.items.map(item => {
+                // Smart Tax Logic
+                // Default category 100 (Food)
+                const categoryCode = 100;
+                let finalTaxType = 'INCLUDED';
+
+                if (taxMode.value === 'EXCLUDED') {
+                    // If Food (100-199), use 8%, otherwise 10%
+                    if (categoryCode >= 100 && categoryCode < 200) {
+                        finalTaxType = 'EXCLUDED_8';
+                    } else {
+                        finalTaxType = 'EXCLUDED_10';
+                    }
+                }
+                
+                return {
+                    id: nextId++,
+                    description: item.description,
+                    amount: item.amount,
+                    category_code: categoryCode, 
+                    taxType: finalTaxType
+                }
+            })
         }
     } catch (e) {
         alert('解析に失敗しました: ' + e.message)
@@ -70,7 +87,14 @@ const removeItem = (index) => {
 }
 
 const calculatedTotal = computed(() => {
-    return items.value.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+    return items.value.reduce((sum, item) => {
+        const amt = Number(item.amount || 0)
+        // Check taxType assigned during analysis
+        if (item.taxType === 'EXCLUDED_8') return sum + Math.floor(amt * 1.08)
+        if (item.taxType === 'EXCLUDED_10') return sum + Math.floor(amt * 1.10)
+        // Default INCLUDED or undefined
+        return sum + amt
+    }, 0)
 })
 
 const apply = () => {
@@ -118,6 +142,19 @@ const apply = () => {
                     キャンセル
                 </button>
             </div>
+        </div>
+        
+        <!-- Tax Mode Setting (Visible before analysis) -->
+        <div v-if="!isAnalyzing && items.length === 0" class="mb-4 bg-gray-50 p-3 rounded text-center">
+            <span class="text-sm font-bold text-gray-700 mr-2">読み取る金額は:</span>
+            <label class="inline-flex items-center mr-4 cursor-pointer">
+                <input type="radio" v-model="taxMode" value="INCLUDED" class="mr-1">
+                <span>税込</span>
+            </label>
+            <label class="inline-flex items-center cursor-pointer">
+                <input type="radio" v-model="taxMode" value="EXCLUDED" class="mr-1">
+                <span>税抜 (食費8%/他10%で自動計算)</span>
+            </label>
         </div>
 
         <!-- Loading -->

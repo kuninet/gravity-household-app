@@ -220,8 +220,8 @@ const applyOCR = (result) => {
                     </div>
                 </div>
                 <div>
-                    <label class="block text-sm font-bold">品名 (店名など)</label>
-                    <input type="text" v-model="form.description" class="border p-2 w-full rounded" placeholder="店名など">
+                    <label class="block text-sm font-bold">品名</label>
+                    <input type="text" v-model="form.description" class="border p-2 w-full rounded" placeholder="品名">
                 </div>
             </div>
 

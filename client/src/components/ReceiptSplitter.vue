@@ -59,6 +59,20 @@ const removeItem = (index) => {
     items.value.splice(index, 1)
 }
 
+const onCategoryChange = (item) => {
+    // Smart Tax Default
+    const code = Number(item.category_code)
+    // If Food (100-199), default to 8% tax excluded
+    if (code >= 100 && code < 200) {
+        item.taxType = 'EXCLUDED_8'
+    } else {
+        // Others default to 10% tax excluded
+        // (Only override if it was already an EXCLUDED type? Or enforce it? 
+        // User asked "Food 8%, Others 10%" implies strict default)
+        item.taxType = 'EXCLUDED_10'
+    }
+}
+
 // Calculate tax included amount for an item
 const calculateItemTotal = (item) => {
     const amt = Number(item.amount)
@@ -96,7 +110,7 @@ const apply = () => {
         
         <!-- Total Payment -->
         <div class="mb-6 bg-blue-50 p-4 rounded">
-            <label class="block text-sm font-bold text-gray-700 mb-1">支払合計 (レシートの最下部)</label>
+            <label class="block text-sm font-bold text-gray-700 mb-1">支払い合計 (税込)</label>
             <input 
                 type="number" 
                 v-model="totalAmount" 
@@ -124,7 +138,7 @@ const apply = () => {
                     <tbody>
                         <tr v-for="(item, index) in items" :key="item.id" class="border-b hover:bg-gray-50">
                             <td class="p-1">
-                                <select v-model="item.category_code" class="border rounded p-1 w-full" required>
+                                <select v-model="item.category_code" @change="onCategoryChange(item)" class="border rounded p-1 w-full" required>
                                     <option value="" disabled>選択</option>
                                     <!-- Filter out logic can be done later if needed, passing raw categories for now -->
                                     <option v-for="cat in categories" :key="cat.code" :value="cat.code">
