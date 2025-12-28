@@ -88,4 +88,74 @@ router.post('/update_cell', (req, res) => {
     );
 });
 
+router.post('/batch_update', async (req, res) => {
+    const { year, cells } = req.body; // cells: [{ month, category_code, amount }]
+
+    if (!year || !cells || !Array.isArray(cells)) {
+        return res.status(400).json({ error: 'Invalid data format' });
+    }
+
+    // Promisify db functions for this scope
+    const dbRun = (sql, params) => new Promise((resolve, reject) => {
+        db.run(sql, params, function (err) {
+            if (err) reject(err); else resolve(this);
+        });
+    });
+
+    const dbGet = (sql, params) => new Promise((resolve, reject) => {
+        db.get(sql, params, (err, row) => {
+            if (err) reject(err); else resolve(row);
+        });
+    });
+
+    try {
+        await dbRun('BEGIN TRANSACTION');
+
+        let processedCount = 0;
+
+        for (const cell of cells) {
+            const { month, category_code, amount } = cell;
+            const fiscal_month = `${year}-${String(month).padStart(2, '0')}`;
+
+            // Check existence
+            const row = await dbGet(
+                'SELECT id FROM transactions WHERE fiscal_month = ? AND category_code = ?',
+                [fiscal_month, category_code]
+            );
+
+            if (amount === '' || amount === null || amount === 0 || amount === '0') {
+                // Delete if exists
+                if (row) {
+                    await dbRun('DELETE FROM transactions WHERE id = ?', [row.id]);
+                }
+            } else {
+                // Upsert
+                if (row) {
+                    await dbRun('UPDATE transactions SET amount = ? WHERE id = ?', [amount, row.id]);
+                } else {
+                    const dateDesc = `${fiscal_month}-01`;
+                    await dbRun(
+                        `INSERT INTO transactions (date, fiscal_month, amount, type, category_code, description) 
+                         VALUES (?, ?, ?, 'EXPENSE', ?, '固定費入力')`,
+                        [dateDesc, fiscal_month, amount, category_code]
+                    );
+                }
+            }
+            processedCount++;
+        }
+
+        await dbRun('COMMIT');
+        res.json({ message: 'Batch update completed', count: processedCount });
+
+    } catch (err) {
+        try {
+            await dbRun('ROLLBACK');
+        } catch (e) {
+            console.error('Rollback failed:', e);
+        }
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
 module.exports = router;

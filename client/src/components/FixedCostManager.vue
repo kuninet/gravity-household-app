@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
-import { fetchCategories, fetchFixedCostMatrix, updateFixedCostCell } from '../api'
+import { fetchCategories, fetchFixedCostMatrix, updateFixedCostCell, updateFixedCostBatch } from '../api'
 
 const year = ref(new Date().getFullYear())
 const categories = ref([])
@@ -72,6 +72,72 @@ const onBlur = async (month, code, event) => {
     }
 }
 
+// Paste Handler
+const handlePaste = async (startMonth, startCode, event) => {
+    event.preventDefault()
+    const clipboardData = event.clipboardData || window.clipboardData
+    const pastedData = clipboardData.getData('Text')
+    
+    // Parse rows and cols
+    const rows = pastedData.trim().split(/\r\n|\n|\r/).map(row => row.split('\t'))
+    
+    if (rows.length === 0) return
+
+    saving.value = true
+    
+    try {
+        const updates = []
+        // Find start indices
+        const startMonthIndex = months.indexOf(startMonth)
+        const startCatIndex = categories.value.findIndex(c => c.code === startCode)
+
+        if (startMonthIndex === -1 || startCatIndex === -1) return
+
+        rows.forEach((row, rIndex) => {
+            const monthIndex = startMonthIndex + rIndex
+            if (monthIndex >= months.length) return // Out of bounds
+
+            const targetMonth = months[monthIndex]
+
+            row.forEach((cellRaw, cIndex) => {
+                const catIndex = startCatIndex + cIndex
+                if (catIndex >= categories.value.length) return // Out of bounds
+
+                const targetCode = categories.value[catIndex].code
+                
+                // Clean input (remove commas, yen sign etc)
+                // Assuming simple number or empty
+                const amount = cellRaw.replace(/[^0-9]/g, '')
+
+                // Update Local State immediately
+                // Initialize if undefined
+                if (!matrix.value[targetMonth]) matrix.value[targetMonth] = {}
+                matrix.value[targetMonth][targetCode] = amount ? Number(amount) : 0
+
+                // Add to batch
+                updates.push({
+                    month: Number(targetMonth),
+                    category_code: targetCode,
+                    amount: amount
+                })
+            })
+        })
+
+        if (updates.length > 0) {
+            await updateFixedCostBatch({
+                year: year.value,
+                cells: updates
+            })
+        }
+    } catch(e) {
+        alert('一括貼り付けに失敗しました')
+        console.error(e)
+    } finally {
+        saving.value = false
+    }
+}
+
+
 // Calculations
 const getMonthTotal = (month) => {
     const row = matrix.value[month]
@@ -129,6 +195,7 @@ const getGrandTotal = () => {
                             type="number" 
                             :value="matrix[m]?.[cat.code]" 
                             @blur="onBlur(m, cat.code, $event)"
+                            @paste="handlePaste(m, cat.code, $event)"
                             @keydown.enter="$event.target.blur()"
                             placeholder="-"
                             class="w-full h-full p-2 text-right focus:bg-blue-50 focus:outline-none bg-transparent transition"
@@ -157,7 +224,8 @@ const getGrandTotal = () => {
     </div>
     
     <div class="mt-2 text-right text-xs text-gray-500">
-        ※ 金額を入力してフォーカスを外すと自動保存されます。保存中: {{ saving ? '...' : '完了' }}
+        ※ 金額を入力してフォーカスを外すと自動保存されます。保存中: {{ saving ? '...' : '完了' }} <br>
+        ※ Excel等からコピー＆ペースト（複数セル）も可能です。
     </div>
   </div>
 </template>

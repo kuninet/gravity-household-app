@@ -91,3 +91,15 @@ export async function updateFixedCostCell(data) {
     if (!res.ok) throw new Error('Failed to update fixed cost');
     return res.json();
 }
+
+export async function updateFixedCostBatch(data) {
+    const res = await fetch(`${API_BASE}/fixed_costs/batch_update`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to batch update fixed cost');
+    return res.json();
+}
