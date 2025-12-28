@@ -136,5 +136,22 @@ router.post('/restore', upload.single('file'), async (req, res) => {
         res.status(500).json({ error: 'Restore failed: ' + e.message });
     }
 });
+// DELETE /reset - Delete All Data
+router.delete('/reset', async (req, res) => {
+    try {
+        await dbRun('BEGIN TRANSACTION');
 
+        // Wipe all
+        await dbRun('DELETE FROM transactions');
+        await dbRun("DELETE FROM sqlite_sequence WHERE name='transactions'");
+
+        await dbRun('COMMIT');
+
+        res.json({ message: 'All data has been deleted.' });
+    } catch (e) {
+        await dbRun('ROLLBACK');
+        console.error('Reset Error:', e);
+        res.status(500).json({ error: 'Failed to delete data: ' + e.message });
+    }
+});
 module.exports = router;

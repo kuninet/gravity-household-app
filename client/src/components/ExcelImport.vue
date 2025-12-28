@@ -11,6 +11,20 @@ const error = ref(null)
 const progressMessage = ref('')
 const targetYear = ref('all')
 
+const resetData = async () => {
+    if (!confirm('【警告】\n本当に全てのデータを削除しますか？\nこの操作は取り消せません。')) return
+    if (!confirm('【最終確認】\nバックアップは取りましたか？\n削除を実行してよろしいですか？')) return
+    
+    try {
+        const res = await fetch('/api/backup/reset', { method: 'DELETE' })
+        if (!res.ok) throw new Error('Deletion failed')
+        alert('全てのデータを削除しました。')
+        window.location.reload()
+    } catch (e) {
+        alert('削除に失敗しました: ' + e.message)
+    }
+}
+
 const onRestoreSelect = async (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -257,6 +271,20 @@ const closeModal = () => {
                     <input type="file" ref="restoreInput" accept=".csv" class="hidden" @change="onRestoreSelect">
                     <button @click="$refs.restoreInput.click()" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 font-bold text-sm">
                         ファイルを選択して復元
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Danger Zone -->
+            <div class="mt-8 pt-8 border-t">
+                <div class="bg-red-100 p-4 rounded text-center border border-red-200">
+                    <h4 class="font-bold text-red-900 mb-2">⚠️ データ全削除</h4>
+                    <p class="text-sm text-red-800 mb-4">
+                        登録されているデータを全て消去します。<br>
+                        この操作は取り消せません。
+                    </p>
+                    <button @click="resetData" class="bg-white text-red-600 border border-red-600 px-4 py-2 rounded hover:bg-red-50 font-bold text-sm">
+                        全データを削除する
                     </button>
                 </div>
             </div>
