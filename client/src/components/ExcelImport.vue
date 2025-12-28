@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 
 const fileInput = ref(null)
+const restoreInput = ref(null)
 const showModal = ref(false)
 const phase = ref('idle') // idle, analyzing, confirm, executing, complete, error
 const analysis = ref(null) // { token, summary }
@@ -9,6 +10,37 @@ const result = ref(null)
 const error = ref(null)
 const progressMessage = ref('')
 const targetYear = ref('all')
+
+const onRestoreSelect = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    if (!confirm('【警告】\nこの操作を行うと、現在登録されている「すべてのデータ」が消去され、CSVの内容で上書きされます。\n\n本当によろしいですか？')) {
+        restoreInput.value.value = ''
+        return
+    }
+
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    // Using existing modal logic slightly hacked or just simple alert? 
+    // Let's use simple alert loop since Restore is specific.
+    try {
+        const res = await fetch('/api/backup/restore', {
+             method: 'POST',
+             body: formData
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Restore failed')
+        
+        alert(`復元が完了しました。\nレコード件数: ${data.count}件`)
+        window.location.reload() // Reload to reflect changes
+    } catch (e) {
+        alert('エラーが発生しました: ' + e.message)
+    } finally {
+        restoreInput.value.value = ''
+    }
+}
 
 const availableYears = computed(() => {
     if (!analysis.value) return []
@@ -195,31 +227,69 @@ const closeModal = () => {
 
 <template>
   <div class="animate-fade-in relative">
-    <h2 class="text-xl font-bold text-gray-700 mb-6">Excelデータインポート</h2>
+    <h2 class="text-xl font-bold text-gray-700 mb-6 font-mono">データ管理 (エクスポート・インポート)</h2>
 
-    <div class="bg-white p-8 rounded shadow text-center max-w-lg mx-auto">
-        <div class="mb-8 text-gray-600 text-left text-sm">
-            <p class="mb-2">以下の形式のExcelファイル(.xlsx, .xls)を取り込めます。</p>
-            <ul class="list-disc list-inside space-y-1 ml-2">
-                <li>日々の記録シート: シート名「yyyy年m月」</li>
-                <li>固定費シート: シート名「yyyy年公共料金等」</li>
-            </ul>
+    <div class="max-w-2xl mx-auto space-y-8">
+        
+        <!-- Full Backup / Restore Section -->
+        <div class="bg-white p-6 rounded shadow">
+            <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">📦 フルバックアップ・復元</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Export -->
+                <div class="bg-blue-50 p-4 rounded text-center">
+                    <h4 class="font-bold text-blue-800 mb-2">バックアップ (エクスポート)</h4>
+                    <p class="text-sm text-blue-600 mb-4">
+                        現在の全データをCSV形式(SJIS)でダウンロードします。
+                    </p>
+                    <a href="/api/backup/export" target="_blank" class="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold text-sm">
+                        ダウンロード
+                    </a>
+                </div>
+
+                <!-- Restore -->
+                <div class="bg-red-50 p-4 rounded text-center">
+                    <h4 class="font-bold text-red-800 mb-2">復元 (リストア)</h4>
+                    <p class="text-sm text-red-600 mb-4">
+                        バックアップCSVを取り込み、<br>
+                        <span class="font-bold underline">現在のデータを全て消去して</span>復元します。
+                    </p>
+                    <input type="file" ref="restoreInput" accept=".csv" class="hidden" @change="onRestoreSelect">
+                    <button @click="$refs.restoreInput.click()" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 font-bold text-sm">
+                        ファイルを選択して復元
+                    </button>
+                </div>
+            </div>
         </div>
 
-        <input 
-            type="file" 
-            ref="fileInput" 
-            class="hidden" 
-            accept=".xlsx, .xls"
-            @change="onFileSelect"
-        />
+        <!-- Existing Excel Import Section -->
+        <div class="bg-white p-6 rounded shadow relative">
+            <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">📊 Excelデータ追加・更新 (テンプレート)</h3>
+            <div class="text-center">
+                <div class="mb-6 text-gray-600 text-left text-sm max-w-lg mx-auto bg-gray-50 p-4 rounded">
+                    <p class="mb-2 font-bold">特定のフォーマットのExcelファイルを取り込みます。</p>
+                    <ul class="list-disc list-inside space-y-1 ml-2">
+                        <li>日々の記録シート: シート名「yyyy年m月」</li>
+                        <li>固定費シート: シート名「yyyy年公共料金等」</li>
+                    </ul>
+                </div>
 
-        <button 
-            @click="triggerSelect" 
-            class="bg-blue-600 text-white px-8 py-4 rounded-lg font-bold text-lg shadow hover:bg-blue-700 transition flex items-center justify-center mx-auto"
-        >
-            ファイルを選択してインポート
-        </button>
+                <input 
+                    type="file" 
+                    ref="fileInput" 
+                    class="hidden" 
+                    accept=".xlsx, .xls"
+                    @change="onFileSelect"
+                />
+
+                <button 
+                    @click="triggerSelect" 
+                    class="bg-green-600 text-white px-8 py-3 rounded-lg font-bold shadow hover:bg-green-700 transition"
+                >
+                    Excelファイルを選択
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- Modal Overlay -->

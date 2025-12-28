@@ -91,7 +91,7 @@ const changeMonth = (offset) => {
                         @click="currentView = 'import'"
                         class="px-4 py-2 rounded-md transition font-bold"
                         :class="currentView === 'import' ? 'bg-white text-blue-700 shadow' : 'text-blue-100 hover:bg-blue-600'">
-                        インポート
+                        データ管理
                     </button>
                 </nav>
 
