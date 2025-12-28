@@ -147,19 +147,22 @@ router.post('/analyze', upload.single('file'), async (req, res) => {
                 }
             }
 
-            // Fixed
+            // Fixed (Standard)
             const matchFixed = sheetName.match(/^(\d{4})年公共料金等$/);
             if (matchFixed) {
-                console.log(`[Analyze] Found Fixed Cost Sheet: ${sheetName}`);
+                console.log(`[Analyze] Found Fixed Cost Sheet (Standard): ${sheetName}`);
                 res.write(JSON.stringify({ type: 'progress', message: `${sheetName} (固定費) を解析中...` }) + '\n');
-
-                // Allow buffer to flush to client before blocking CPU
                 await new Promise(r => setTimeout(r, 20));
+                summary.fixed.push({ sheet: sheetName, year: matchFixed[1] });
+            }
 
-                summary.fixed.push({
-                    sheet: sheetName,
-                    year: matchFixed[1]
-                });
+            // Fixed (Alternative: yyyy合計)
+            const matchTotal = sheetName.match(/^(\d{4})合計$/);
+            if (matchTotal) {
+                console.log(`[Analyze] Found Fixed Cost Sheet (Alternative): ${sheetName}`);
+                res.write(JSON.stringify({ type: 'progress', message: `${sheetName} (固定費・別形式) を解析中...` }) + '\n');
+                await new Promise(r => setTimeout(r, 20));
+                summary.fixed.push({ sheet: sheetName, year: matchTotal[1] });
             }
         }
 
@@ -372,9 +375,83 @@ router.post('/execute', express.json(), async (req, res) => {
                     idx++;
                 }
             }
+
+            // FIXED COSTS (Alternative: yyyy合計)
+            const matchTotal = sheetName.match(/^(\d{4})合計$/);
+            if (matchTotal) {
+                const year = parseInt(matchTotal[1], 10);
+                if (targetYear && parseInt(targetYear, 10) !== year) continue;
+
+                res.write(JSON.stringify({ type: 'progress', message: `${sheetName} (固定費・別形式) を処理中...` }) + '\n');
+                const sheet = workbook.Sheets[sheetName];
+
+                // 3rd row is Header (Index 2), 4th row start Data (Index 3)
+                const rows = xlsx.utils.sheet_to_json(sheet, { header: 'A', range: 3 });
+                // range: 3 means start reading from Row 4 (0,1,2,3... index 3 is Row 4)
+
+                // Column Map (0-based index in A,B,C...)
+                // G(6): Rent(604), H(7): Elec(601), I(8)+J(9): Gas(603), K(10): Water(602)
+                // L(11): Phone(605), M(12): Mobile(607), N(13): Pocket(901)
+                const directMap = {
+                    'G': 604, 'H': 601, 'K': 602, 'L': 605, 'M': 607, 'N': 901
+                };
+
+                let monthIdx = 0;
+                for (const row of rows) {
+                    if (monthIdx >= 12) break; // Max 12 months
+                    const month = monthIdx + 1;
+                    const fiscalMonth = `${year}-${String(month).padStart(2, '0')}`;
+                    const dateStr = `${fiscalMonth}-01`;
+
+                    console.log(`[Execute] Processing Alt Fixed Cost (Month: ${month})`);
+
+                    // Prepare codes to delete for this month (All potential fixed costs in this format)
+                    const fixedCodes = [604, 601, 603, 602, 605, 607, 901];
+                    // Note: Insurance(608) and Dishwasher(606) not in this format, so we don't touch them?
+                    // Or should we wipe them too to be safe/clean? 
+                    // User said "Insurance/Dishwasher columns don't exist". 
+                    // Safer to ONLY touch the codes we are importing. Leaving others alone implies they might be manually entered?
+                    // But usually "Import" overwrites. 
+                    // Let's stick to deleting only the codes we handle here. 
+
+                    const placeholders = fixedCodes.map(() => '?').join(',');
+                    await new Promise((resolve) => {
+                        db.run(`DELETE FROM transactions WHERE fiscal_month = ? AND category_code IN (${placeholders})`, [fiscalMonth, ...fixedCodes], () => resolve());
+                    });
+
+                    // 1. Direct Mappings
+                    for (const colKey of Object.keys(directMap)) {
+                        if (row[colKey]) {
+                            let amount = parseInt(String(row[colKey]).replace(/[^\d-]/g, ''), 10);
+                            if (!isNaN(amount) && amount > 0) {
+                                const code = directMap[colKey];
+                                await new Promise((resolve) => {
+                                    db.run(`INSERT INTO transactions (date, fiscal_month, amount, type, category_code, description, memo) VALUES (?, ?, ?, 'EXPENSE', ?, 'ExcelImport', '固定費(合計シート)')`,
+                                        [dateStr, fiscalMonth, amount, code], () => resolve());
+                                });
+                                results.fixed++;
+                            }
+                        }
+                    }
+
+                    // 2. Gas (I + J)
+                    let gasAmount = 0;
+                    if (row['I']) gasAmount += (parseInt(String(row['I']).replace(/[^\d-]/g, ''), 10) || 0);
+                    if (row['J']) gasAmount += (parseInt(String(row['J']).replace(/[^\d-]/g, ''), 10) || 0);
+
+                    if (gasAmount > 0) {
+                        await new Promise((resolve) => {
+                            db.run(`INSERT INTO transactions (date, fiscal_month, amount, type, category_code, description, memo) VALUES (?, ?, ?, 'EXPENSE', ?, 'ExcelImport', '固定費(合計シート)')`,
+                                [dateStr, fiscalMonth, gasAmount, 603], () => resolve());
+                        });
+                        results.fixed++;
+                    }
+
+                    monthIdx++;
+                }
+            }
         }
 
-        // COMMIT removed - Auto-commit mode
         res.write(JSON.stringify({ type: 'complete', results }) + '\n');
         res.end();
         // Cleanup
