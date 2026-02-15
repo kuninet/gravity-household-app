@@ -1,13 +1,22 @@
 {
-  "name": "household-app-e2e-tests",
+  "name": "household-app",
   "version": "1.0.0",
-  "description": "E2E tests for household accounting app",
+  "description": "Household accounting app",
   "scripts": {
+    "setup": "npm install && run-s setup:*",
+    "setup:client": "npm install --prefix client",
+    "setup:server": "npm install --prefix server",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "npm start --prefix server",
+    "client": "npm run dev --prefix client",
+    "seed": "npm run seed --prefix server",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug"
   },
   "devDependencies": {
-    "@playwright/test": "^1.40.0"
+    "@playwright/test": "^1.40.0",
+    "concurrently": "^8.2.2",
+    "npm-run-all": "^4.1.5"
   }
 }
