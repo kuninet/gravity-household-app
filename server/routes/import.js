@@ -289,7 +289,18 @@ router.post('/execute', express.json(), async (req, res) => {
 
                     let dateObj = new Date(dateStr);
                     if (!isNaN(dateObj.getTime())) {
-                        dateObj.setFullYear(year);
+                        // FIX: If Sheet is January and Data is December, treat as Previous Year
+                        const recordMonth = dateObj.getMonth() + 1;
+                        let targetYear = year;
+                        // Sheet Name "yyyy年1月" -> year=yyyy, month=1
+                        // If sheet says 2025/01 but data is 12/xx, it's 2024.
+                        // We derived `year` from sheet name earlier.
+                        const sheetMonth = parseInt(matchDaily[2], 10);
+                        if (sheetMonth === 1 && recordMonth === 12) {
+                            targetYear = year - 1;
+                        }
+
+                        dateObj.setFullYear(targetYear);
                         const validY = dateObj.getFullYear();
                         const validM = String(dateObj.getMonth() + 1).padStart(2, '0');
                         const validD = String(dateObj.getDate()).padStart(2, '0');
