@@ -40,6 +40,8 @@
 │   │   ├── api.js          # API呼び出し関数群
 │   │   ├── App.vue         # メインアプリケーション
 │   │   └── main.js         # エントリーポイント
+│   ├── .env                # フロント環境変数 (VITE_DEV_PORT, VITE_API_PORT)
+│   ├── .env.example        # .envテンプレート
 │   └── vite.config.js      # Vite設定 (プロキシ設定含む)
 │
 ├── server/                 # バックエンド・ソースコード
@@ -49,8 +51,10 @@
 │   │   ├── ocr.js          # Gemini OCR処理
 │   │   ├── import.js       # Excelインポート
 │   │   └── backup.js       # 全データバックアップ・復元・削除
+│   ├── .env                # サーバー環境変数 (PORT, GEMINI_API_KEY)
+│   ├── .env.example        # .envテンプレート
 │   ├── db.js               # SQLite接続・スキーマ定義
-│   ├── app.js              # Expressアプリ設定・ルーティング登録
+│   ├── app.js              # Expressアプリ設定・ルーティング登録 (dotenv読込)
 │   ├── household.db        # SQLiteデータベースファイル (自動生成)
 │   └── uploads/            # 一時ファイル保存先
 │
@@ -58,7 +62,8 @@
 ```
 
 ## データフローとプロキシ
-開発環境 (`npm run dev`) では、フロントエンド(Vite: 5173) とバックエンド(Express: 3001) が別ポートで動作します。
+開発環境 (`npm run dev`) では、フロントエンド(Vite) とバックエンド(Express) が別ポートで動作します。
+デフォルトではフロントエンドが **5173**、バックエンドが **3001** ですが、各 `.env` ファイルで変更可能です。
 CORS問題を回避するため、`vite.config.js` の `server.proxy` 設定により、`/api` へのリクエストはバックエンドへ転送されます。
 
 **リクエストフロー:**

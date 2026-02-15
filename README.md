@@ -42,25 +42,52 @@ Excelでの家計管理から移行するために開発された、Webベース
     npm run setup
     ```
 
-3.  **初期データの投入（シード）**
+3.  **環境変数の設定**
+    各ディレクトリの `.env.example` をコピーして `.env` を作成します。
+    ```bash
+    cp server/.env.example server/.env
+    cp client/.env.example client/.env
+    ```
+    `server/.env` に Gemini API キーなど必要な値を設定してください。
+    ポート番号を変更したい場合は、各 `.env` ファイルを編集します（後述）。
+
+4.  **初期データの投入（シード）**
     データベース（SQLite）の初期設定とサンプルデータの投入を行います。
     ```bash
     npm run seed
     ```
 
-4.  **アプリケーションの起動**
+5.  **アプリケーションの起動**
     以下のコマンドでサーバーとクライアントを同時に起動します。
     ```bash
     npm run dev
     ```
-    *   ブラウザで `http://localhost:5173` (Viteデフォルト) にアクセスして利用します。
-    *   バックエンドAPIは `http://localhost:3000` で動作します。
+    *   ブラウザで `http://localhost:5173` にアクセスして利用します。
+    *   バックエンドAPIは `http://localhost:3001` で動作します。
 
 ## ディレクトリ構成
 
 *   `client/`: フロントエンド (Vue.js) のソースコード
 *   `server/`: バックエンド (Express) のソースコードとデータベース関連
 *   `package.json`: プロジェクト全体のスクリプト管理
+
+## 環境変数
+
+各ポート番号は `.env` ファイルで変更可能です。
+
+### `server/.env`
+| 変数名 | デフォルト値 | 説明 |
+| --- | --- | --- |
+| `PORT` | `3001` | バックエンドAPIサーバーのポート番号 |
+| `GEMINI_API_KEY` | ― | Gemini API キー（レシートOCR機能で使用） |
+
+### `client/.env`
+| 変数名 | デフォルト値 | 説明 |
+| --- | --- | --- |
+| `VITE_DEV_PORT` | `5173` | フロントエンド開発サーバーのポート番号 |
+| `VITE_API_PORT` | `3001` | プロキシ先バックエンドのポート番号 |
+
+> ⚠️ `server/.env` の `PORT` と `client/.env` の `VITE_API_PORT` は同じ値にしてください。
 
 ## 開発用コマンド
 
