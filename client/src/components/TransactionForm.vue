@@ -21,6 +21,7 @@ const recentTransactions = ref([])
 const isSubmitting = ref(false)
 const showSplitter = ref(false)
 const showOCR = ref(false)
+const isLoading = ref(true)
 
 // Splitter State (for re-edit)
 const splitterState = ref({
@@ -32,10 +33,13 @@ const splitterState = ref({
 onMounted(async () => {
   try {
     const res = await fetchCategories()
-    categories.value = res.data
+    categories.value = res.data || []
     await refreshRecent()
   } catch (e) {
-    console.error(e)
+    console.error('Failed to load categories:', e)
+    categories.value = [] // Ensure it's always an array
+  } finally {
+    isLoading.value = false
   }
 })
 
@@ -195,9 +199,9 @@ const applyOCR = (result) => {
 
             <div>
                 <label class="block text-sm font-bold">費目 (メイン: 食費など)</label>
-                <select v-model="form.category_code" class="border p-2 w-full rounded" required>
-                    <option value="" disabled>選択してください</option>
-                    <option v-for="cat in categories.filter(c => c.code < 600 || (c.code >= 700 && c.code < 900) || (c.code >= 900 && c.code !== 901))" :key="cat.code" :value="cat.code">
+                <select v-model="form.category_code" class="border p-2 w-full rounded" required :disabled="isLoading">
+                    <option value="" disabled>{{ isLoading ? '読み込み中...' : '選択してください' }}</option>
+                    <option v-for="cat in (categories || []).filter(c => c.code < 600 || (c.code >= 700 && c.code < 900) || (c.code >= 900 && c.code !== 901))" :key="cat.code" :value="cat.code">
                         {{ cat.code }}: {{ cat.name }} ({{ cat.group_name }})
                     </option>
                 </select>
@@ -258,7 +262,7 @@ const applyOCR = (result) => {
     <!-- Splitter Modal -->
     <ReceiptSplitter 
         :show="showSplitter" 
-        :categories="categories"
+        :categories="categories || []"
         :initial-total="splitterState.total"
         :initial-items="splitterState.items"
         @close="showSplitter = false"
@@ -268,7 +272,7 @@ const applyOCR = (result) => {
     <!-- OCR Modal -->
     <ReceiptOCR 
         :show="showOCR" 
-        :categories="categories"
+        :categories="categories || []"
         @close="showOCR = false"
         @apply="applyOCR"
     />

@@ -1,15 +1,13 @@
 {
-  "name": "household-account-app",
+  "name": "household-app-e2e-tests",
   "version": "1.0.0",
-  "description": "Household Account App (Vue + Express)",
+  "description": "E2E tests for household accounting app",
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "cd server && node app.js",
-    "client": "cd client && npm run dev",
-    "setup": "npm install && cd server && npm install && cd ../client && npm install",
-    "seed": "node server/seed.js"
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@playwright/test": "^1.40.0"
   }
 }
