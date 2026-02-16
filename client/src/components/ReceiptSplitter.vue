@@ -62,8 +62,8 @@ const removeItem = (index) => {
 const onCategoryChange = (item) => {
     // Smart Tax Default
     const code = Number(item.category_code)
-    // If Food (100-199), default to 8% tax excluded
-    if (code >= 100 && code < 200) {
+    // If Food (100-199) excluding Alcohol (105), default to 8% tax excluded
+    if (code >= 100 && code < 200 && code !== 105) {
         item.taxType = 'EXCLUDED_8'
     } else {
         // Others default to 10% tax excluded

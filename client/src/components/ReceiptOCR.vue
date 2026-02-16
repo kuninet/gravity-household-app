@@ -82,6 +82,18 @@ const analyze = async () => {
     }
 }
 
+const updateTaxType = (item) => {
+    if (taxMode.value !== 'EXCLUDED') return
+
+    const code = Number(item.category_code)
+    // Food (100-199) is 8%, but Alcohol (105) is 10%
+    if (code >= 100 && code < 200 && code !== 105) {
+        item.taxType = 'EXCLUDED_8'
+    } else {
+        item.taxType = 'EXCLUDED_10'
+    }
+}
+
 const removeItem = (index) => {
     items.value.splice(index, 1)
 }
@@ -183,7 +195,7 @@ const apply = () => {
                     <tbody>
                         <tr v-for="(item, index) in items" :key="item.id" class="border-b hover:bg-gray-50">
                             <td class="p-2">
-                                <select v-model="item.category_code" class="border rounded p-1 w-full">
+                                <select v-model="item.category_code" @change="updateTaxType(item)" class="border rounded p-1 w-full">
                                     <option v-for="cat in categories" :key="cat.code" :value="cat.code">
                                         {{ cat.name }}
                                     </option>
