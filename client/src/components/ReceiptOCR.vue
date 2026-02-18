@@ -16,6 +16,8 @@ const selectedFile = ref(null)
 const isAnalyzing = ref(false)
 const items = ref([]) // { id, description, amount, category_code, taxType }
 const totalAmount = ref(0)
+const detectedDate = ref('')
+const detectedStore = ref('')
 let nextId = 1
 
 const taxMode = ref('INCLUDED') // INCLUDED or EXCLUDED
@@ -49,6 +51,10 @@ const analyze = async () => {
         if (!res.ok) throw new Error('Analysis failed')
         const data = await res.json()
         
+        // Extract date and store
+        detectedDate.value = data.date || ''
+        detectedStore.value = data.store || ''
+
         // Map to internal format
         if (data.items) {
             items.value = data.items.map(item => {
@@ -117,9 +123,11 @@ const apply = () => {
     // Let's send everything as `items` in the same format ReceiptSplitter uses.
     
     emit('apply', {
-        amount: 0, // Main amount is 0 if everything is in items
+        amount: 0, 
         total: calculatedTotal.value,
-        items: items.value
+        items: items.value,
+        date: detectedDate.value,
+        store: detectedStore.value
     })
     emit('close')
 }
@@ -180,6 +188,17 @@ const apply = () => {
             <div class="mb-2 flex justify-between items-center">
                 <h4 class="font-bold text-gray-600">解析結果の確認・修正</h4>
                 <div class="text-sm text-gray-500">合計: {{ calculatedTotal.toLocaleString() }}</div>
+            </div>
+
+            <div class="mb-4 bg-gray-50 p-3 rounded flex space-x-4">
+               <div class="flex-1">
+                   <label class="block text-sm font-bold text-gray-700">日付</label>
+                   <input type="date" v-model="detectedDate" class="border rounded p-1 w-full text-gray-700">
+               </div>
+               <div class="flex-1">
+                   <label class="block text-sm font-bold text-gray-700">店名</label>
+                   <input type="text" v-model="detectedStore" class="border rounded p-1 w-full text-gray-700" placeholder="スーパーABC">
+               </div>
             </div>
             
             <div class="flex-1 overflow-y-auto border rounded bg-white">

@@ -143,31 +143,26 @@ const openOCR = () => {
 }
 
 const applyOCR = (result) => {
-    // Treat OCR items as splitter items for multi-record flexibility?
-    // result: { amount, total, items }
-    // User requested "List display, correct, and bulk input".
-    // So mapping to splitterState is perfect.
+    // result: { amount, total, items, date, store }
     
-    form.value.amount = result.amount // Should be 0 if all are in items? Or remaining?
-    // Using splitter logic, amount is the "Main" part.
-    // If OCR returns everything as "items", then amount is 0.
-    // But the user still needs to pick a Main Category in the form for the "Main" transaction.
-    // However, if amount is 0, we shouldn't create a main transaction with 0 amount ideally.
-    // But our API might allow 0? Or we should block it.
-    // Let's assume user might want to put ONE item as main.
-    // FOR NOW: Let's dump everything into items and set main input to 0, 
-    // user can manually move one out or we just support 0 amount main tx? 
-    // Actually, createTransaction (main) requires amount > 0 usually.
-    // Let's update `submit` to skip main if amount is 0/empty.
-    
-    splitterState.value.total = result.total // Just for reference
+    form.value.amount = result.amount 
+    splitterState.value.total = result.total 
     splitterState.value.items = result.items 
-    
-    // If OCR found items, let's open Splitter automatically?
-    // Or just show the badge like we do.
-    // User said "List display". Splitter modal does that but only when open.
-    // Maybe we should open Splitter after OCR if items exist?
-    // No, let's stick to simple state update first.
+
+    // Apply Date if exists
+    if (result.date) {
+        form.value.date = result.date
+    }
+
+    // Apply Store Name to Memo
+    if (result.store) {
+        // If memo is empty, just set it. If not, append it.
+        if (form.value.memo) {
+            form.value.memo += ` (${result.store})`
+        } else {
+            form.value.memo = result.store
+        }
+    }
 }
 </script>
 

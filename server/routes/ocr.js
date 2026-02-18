@@ -36,22 +36,28 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
 
     try {
         const prompt = `
-        Analyze this receipt image and extract the items purchased.
-        Return ONLY a JSON object with a key "items" containing an array of objects.
-        Each object should have:
+        Analyze this receipt image and extract the items purchased, the date, and the store name.
+        Return ONLY a JSON object with keys "items", "date", and "store".
+        
+        "items": An array of objects, where each object has:
         - "description": The name of the item (string)
         - "amount": The price of the item (number, remove currency symbols)
         
+        "date": The date of the receipt in YYYY-MM-DD format (string). If year is missing, guess current year. If unknown, return null.
+        "store": The name of the store (string). If unknown, return null.
+
         Example format:
         {
+          "store": "Supermarket ABC",
+          "date": "2024-05-20",
           "items": [
             { "description": "Apple", "amount": 100 },
             { "description": "Milk", "amount": 200 }
           ]
         }
         
-        Ignore total amounts, taxes, or change. Just list the line items.
-        If the image is not a receipt or unreadable, return {"items": []}.
+        Ignore total amounts, taxes, or change for the items list. Just list the line items.
+        If the image is not a receipt or unreadable, return {"items": [], "date": null, "store": null}.
         `;
 
         // Based on available models for this key
