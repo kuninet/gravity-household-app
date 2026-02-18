@@ -14,22 +14,16 @@ db.all(`
 });
 
 
-console.log('\n--- Testing "Recent" Query Logic ---');
-const placeholders = FIXED_COST_CODES.map(() => '?').join(',');
-const sql = `
-    SELECT id, date, description, category_code, amount 
-    FROM transactions 
-    WHERE category_code NOT IN (${placeholders})
-    ORDER BY id DESC 
-    LIMIT 10
-`;
-
-db.all(sql, FIXED_COST_CODES, (err, rows) => {
+console.log('\n--- Checking Income Groups ---');
+db.all(`
+    SELECT 
+        c.group_name,
+        SUM(t.amount) as total
+    FROM transactions t
+    JOIN categories c ON t.category_code = c.code
+    WHERE t.type = 'INCOME'
+    GROUP BY c.group_name
+`, (err, rows) => {
     if (err) console.error(err);
-    else {
-        console.table(rows);
-        // Verify no fixed cost codes are present
-        const hasFixedCost = rows.some(r => FIXED_COST_CODES.includes(r.category_code));
-        console.log(`Contains Fixed Costs: ${hasFixedCost}`);
-    }
+    else console.table(rows);
 });

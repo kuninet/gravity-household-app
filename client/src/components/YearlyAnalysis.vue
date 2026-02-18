@@ -129,6 +129,38 @@ const chartOptions = {
                         </td>
                     </tr>
                 </tbody>
+                <tfoot v-if="analysisData.summary" class="bg-gray-50 border-t-2 border-gray-300">
+                    <!-- Income Total -->
+                    <tr class="hover:bg-blue-50 text-blue-800">
+                        <td class="p-2 border font-bold sticky left-0 bg-blue-50 z-10 shadow-sm">収入合算</td>
+                        <td class="p-2 border text-right font-bold font-mono bg-blue-100">
+                            {{ analysisData.summary.total_income.toLocaleString() }}
+                        </td>
+                        <td v-for="(amt, i) in analysisData.summary.income" :key="'inc-'+i" class="p-2 border text-right font-mono">
+                            {{ amt.toLocaleString() }}
+                        </td>
+                    </tr>
+                    <!-- Expense Total -->
+                    <tr class="hover:bg-red-50 text-red-800">
+                        <td class="p-2 border font-bold sticky left-0 bg-red-50 z-10 shadow-sm">支出合算</td>
+                        <td class="p-2 border text-right font-bold font-mono bg-red-100">
+                            {{ analysisData.summary.total_expense.toLocaleString() }}
+                        </td>
+                        <td v-for="(amt, i) in analysisData.summary.expense" :key="'exp-'+i" class="p-2 border text-right font-mono">
+                            {{ amt.toLocaleString() }}
+                        </td>
+                    </tr>
+                    <!-- Balance -->
+                    <tr class="hover:bg-yellow-50 font-bold border-t-2 border-gray-400">
+                        <td class="p-2 border sticky left-0 z-10 shadow-sm" :class="analysisData.summary.total_balance >= 0 ? 'bg-white text-black' : 'bg-red-50 text-red-600'">収支</td>
+                        <td class="p-2 border text-right font-mono text-lg bg-yellow-100" :class="analysisData.summary.total_balance >= 0 ? 'text-black' : 'text-red-600'">
+                            {{ analysisData.summary.total_balance.toLocaleString() }}
+                        </td>
+                        <td v-for="(amt, i) in analysisData.summary.balance" :key="'bal-'+i" class="p-2 border text-right font-mono" :class="amt !== null && amt >= 0 ? 'text-black' : 'text-red-600'">
+                            {{ amt !== null ? amt.toLocaleString() : '-' }}
+                        </td>
+                    </tr>
+                </tfoot>
             </table>
        </div>
 
