@@ -20,6 +20,20 @@ const detectedDate = ref('')
 const detectedStore = ref('')
 let nextId = 1
 
+import { watch } from 'vue'
+
+watch(() => props.show, (newVal) => {
+    if (newVal) {
+        // Reset state when opened
+        items.value = []
+        selectedFile.value = null
+        isAnalyzing.value = false
+        detectedDate.value = ''
+        detectedStore.value = ''
+        if (fileInput.value) fileInput.value.value = ''
+    }
+})
+
 const taxMode = ref('INCLUDED') // INCLUDED or EXCLUDED
 const isDragging = ref(false)
 
