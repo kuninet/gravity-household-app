@@ -59,9 +59,9 @@ onMounted(async () => {
 // Refresh recent transactions for copy feature
 const refreshRecent = async () => {
     try {
-        const res = await fetchTransactions()
-        // Get last 5
-        recentTransactions.value = res.data.slice(0, 5)
+        // Fetch recent (server handles limit and sorting)
+        const res = await fetchTransactions(null, true)
+        recentTransactions.value = res.data
     } catch (e) {
         console.error(e)
     }

@@ -19,18 +19,26 @@ function getFiscalMonth(dateStr) {
     return `${year}-${String(month).padStart(2, '0')}`;
 }
 
+const FIXED_COST_CODES = [604, 601, 603, 606, 602, 605, 607, 901, 608];
+
 // Get transactions (optional filter by fiscal_month)
 router.get('/', (req, res) => {
-    const { month } = req.query;
+    const { month, type } = req.query;
     let sql = 'SELECT * FROM transactions';
     const params = [];
 
-    if (month) {
-        sql += ' WHERE fiscal_month = ?';
-        params.push(month);
+    if (type === 'recent') {
+        const placeholders = FIXED_COST_CODES.map(() => '?').join(',');
+        sql += ` WHERE category_code NOT IN (${placeholders})`;
+        params.push(...FIXED_COST_CODES);
+        sql += ' ORDER BY id DESC LIMIT 10';
+    } else {
+        if (month) {
+            sql += ' WHERE fiscal_month = ?';
+            params.push(month);
+        }
+        sql += ' ORDER BY date DESC, id DESC';
     }
-
-    sql += ' ORDER BY date DESC, id DESC';
 
     db.all(sql, params, (err, rows) => {
         if (err) {

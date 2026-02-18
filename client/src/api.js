@@ -1,10 +1,15 @@
 const API_BASE = '/api';
 
-export async function fetchTransactions(month) {
+export async function fetchTransactions(month, isRecent = false) {
     let url = `${API_BASE}/transactions`;
-    if (month) {
-        url += `?month=${month}`;
+    const params = new URLSearchParams();
+    if (month) params.append('month', month);
+    if (isRecent) params.append('type', 'recent');
+
+    if (Array.from(params).length > 0) {
+        url += `?${params.toString()}`;
     }
+
     const res = await fetch(url);
     if (!res.ok) throw new Error('Failed to fetch transactions');
     return res.json();
