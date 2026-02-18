@@ -49,6 +49,11 @@ watch(currentMonth, () => {
     if (currentView.value === 'dashboard') loadData()
 })
 
+// Reload when view changes to dashboard (to reflect Fixed Cost updates)
+watch(currentView, (newView) => {
+    if (newView === 'dashboard') loadData()
+})
+
 const changeMonth = (offset) => {
     const [y, m] = currentMonth.value.split('-').map(Number)
     const date = new Date(y, m - 1 + offset, 1)
