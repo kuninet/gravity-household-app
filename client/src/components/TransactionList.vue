@@ -123,17 +123,11 @@ const saveEdit = async () => {
         // Let's reuse existing cat logic if possible or assume user doesn't change type implicitly?
         // Actually, if user changes Category to "Salary" (Income), type should be INCOME.
         // We need to look up category.
-        const cat = props.categories.find(c => c.code === editForm.value.category_code)
-        if (cat) {
-             // Heuristic: Income categories are usually specific range. 
-             // In TransactionForm: category_code >= 900 && code !== 901 ?
-             // Let's assume the user selects correct category group.
-             // But valid Type is needed for DB.
-             // If category is Income group, set INCOME.
-             // In this app, it seems income is handled manually in form, but here we can infer?
-             // Or just trust existing type unless we implement type switching logic.
-             // Let's just keep 'type' from original unless necessary, BUT if category changes group...
-             // Let's stick to simple: Just update fields. The backend does NO type inference.
+        const catCode = Number(editForm.value.category_code)
+        if (catCode >= 700 && catCode < 800) {
+            editForm.value.type = 'INCOME'
+        } else {
+            editForm.value.type = 'EXPENSE'
         }
 
         await updateTransaction(editingId.value, editForm.value)

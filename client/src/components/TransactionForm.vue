@@ -29,6 +29,19 @@ const splitterState = ref({
     items: []
 })
 
+// Watch for category change to auto-select type
+import { watch } from 'vue'
+watch(() => form.value.category_code, (newCode) => {
+    if (!newCode) return
+    const code = Number(newCode)
+    // 700-799 is Income, others are Expenses
+    if (code >= 700 && code < 800) {
+        form.value.type = 'INCOME'
+    } else {
+        form.value.type = 'EXPENSE'
+    }
+})
+
 // Fetch master data
 onMounted(async () => {
   try {
@@ -84,9 +97,13 @@ const submit = async () => {
            const amount = calc(item)
            if (amount <= 0) continue
 
+           // Determine type based on category
+           const code = Number(item.category_code)
+           const type = (code >= 700 && code < 800) ? 'INCOME' : 'EXPENSE'
+
            await createTransaction({
                date: form.value.date,
-               type: 'EXPENSE',
+               type: type,
                amount: amount,
                category_code: item.category_code,
                description: item.description || form.value.description, // Use specific item desc or fallback
