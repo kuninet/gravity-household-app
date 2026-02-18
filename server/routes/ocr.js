@@ -26,6 +26,37 @@ function fileToGenerativePart(path, mimeType) {
     };
 }
 
+// Helper to get available models
+async function getAvailableModels() {
+    if (!API_KEY) return [];
+    try {
+        // Use REST API to list models as SDK might not expose it easily in this version
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`);
+        const data = await response.json();
+        if (data.models) {
+            return data.models
+                .filter(m => m.name.includes('gemini') && m.supportedGenerationMethods.includes('generateContent'))
+                .map(m => ({
+                    id: m.name.replace('models/', ''),
+                    name: m.displayName
+                }));
+        }
+    } catch (e) {
+        console.error("Failed to fetch models:", e);
+    }
+    // Fallback list if API fails
+    return [
+        { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
+        { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" },
+        { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro" }
+    ];
+}
+
+router.get('/models', async (req, res) => {
+    const models = await getAvailableModels();
+    res.json({ models });
+});
+
 router.post('/analyze', upload.single('image'), async (req, res) => {
     if (!API_KEY) {
         return res.status(500).json({ error: "Server configuration error: API Key missing." });
@@ -60,12 +91,22 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
         If the image is not a receipt or unreadable, return {"items": [], "date": null, "store": null}.
         `;
 
-        // Based on available models for this key
-        const models = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-2.0-flash-lite"];
+        // Determine model to use
+        const userModel = req.body.model;
+        console.log(`[OCR] Request received. Selected model: ${userModel || 'None (Using default)'}`);
+
+        let modelsToTry = ["gemini-2.0-flash", "gemini-1.5-flash"]; // Default fallback chain
+
+        if (userModel) {
+            modelsToTry = [userModel];
+        }
+
+        console.log(`[OCR] Models to try: ${JSON.stringify(modelsToTry)}`);
+
         let result = null;
         let lastError = null;
 
-        for (const modelName of models) {
+        for (const modelName of modelsToTry) {
             try {
                 console.log(`Trying model: ${modelName}`);
                 const model = genAI.getGenerativeModel({ model: modelName });

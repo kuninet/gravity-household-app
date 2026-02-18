@@ -18,9 +18,45 @@ const items = ref([]) // { id, description, amount, category_code, taxType }
 const totalAmount = ref(0)
 const detectedDate = ref('')
 const detectedStore = ref('')
+const selectedModel = ref('')
+const availableModels = ref([])
 let nextId = 1
 
-import { watch } from 'vue'
+import { watch, onMounted } from 'vue'
+
+const fetchModels = async () => {
+    try {
+        const res = await fetch('/api/ocr/models')
+        const data = await res.json()
+        if (data.models && data.models.length > 0) {
+            availableModels.value = data.models
+            
+            // Try to load from localStorage
+            const savedModel = localStorage.getItem('ocr_selected_model')
+            const savedModelExists = data.models.some(m => m.id === savedModel)
+
+            if (savedModel && savedModelExists) {
+                selectedModel.value = savedModel
+            } else {
+                // Default to 1.5-flash or 3.0-flash if available, else first one
+                const preferred = data.models.find(m => m.id.includes('1.5-flash')) || data.models[0]
+                selectedModel.value = preferred.id
+            }
+        }
+    } catch (e) {
+        console.error("Failed to load models", e)
+    }
+}
+
+watch(selectedModel, (newVal) => {
+    if (newVal) {
+        localStorage.setItem('ocr_selected_model', newVal)
+    }
+})
+
+onMounted(() => {
+    fetchModels()
+})
 
 watch(() => props.show, (newVal) => {
     if (newVal) {
@@ -31,6 +67,9 @@ watch(() => props.show, (newVal) => {
         detectedDate.value = ''
         detectedStore.value = ''
         if (fileInput.value) fileInput.value.value = ''
+        
+        // Refresh models when opening
+        fetchModels()
     }
 })
 
@@ -56,6 +95,9 @@ const analyze = async () => {
     
     const formData = new FormData()
     formData.append('image', selectedFile.value)
+    if (selectedModel.value) {
+        formData.append('model', selectedModel.value)
+    }
 
     try {
         const res = await fetch('/api/ocr/analyze', {
@@ -179,16 +221,31 @@ const apply = () => {
         </div>
         
         <!-- Tax Mode Setting (Visible before analysis) -->
-        <div v-if="!isAnalyzing && items.length === 0" class="mb-4 bg-gray-50 p-3 rounded text-center">
-            <span class="text-sm font-bold text-gray-700 mr-2">読み取る金額は:</span>
-            <label class="inline-flex items-center mr-4 cursor-pointer">
-                <input type="radio" v-model="taxMode" value="INCLUDED" class="mr-1">
-                <span>税込</span>
-            </label>
-            <label class="inline-flex items-center cursor-pointer">
-                <input type="radio" v-model="taxMode" value="EXCLUDED" class="mr-1">
-                <span>税抜 (食費8%/他10%で自動計算)</span>
-            </label>
+        <!-- Settings (Tax & Model) -->
+        <div v-if="!isAnalyzing && items.length === 0" class="mb-4 bg-gray-50 p-3 rounded flex flex-col md:flex-row justify-between items-center gap-2">
+            
+            <!-- Tax Mode -->
+            <div>
+                 <span class="text-sm font-bold text-gray-700 mr-2">読み取る金額は:</span>
+                 <label class="inline-flex items-center mr-4 cursor-pointer">
+                     <input type="radio" v-model="taxMode" value="INCLUDED" class="mr-1">
+                     <span class="text-sm">税込</span>
+                 </label>
+                 <label class="inline-flex items-center cursor-pointer">
+                     <input type="radio" v-model="taxMode" value="EXCLUDED" class="mr-1">
+                     <span class="text-sm">税抜 (食費8%/他10%)</span>
+                 </label>
+            </div>
+
+            <!-- Model Selection -->
+            <div class="flex items-center">
+                 <label class="text-sm font-bold text-gray-700 mr-2">モデル:</label>
+                 <select v-model="selectedModel" class="border rounded p-1 text-sm max-w-[200px]">
+                     <option v-for="model in availableModels" :key="model.id" :value="model.id">
+                         {{ model.name.replace('Gemini ', '') }}
+                     </option>
+                 </select>
+            </div>
         </div>
 
         <!-- Loading -->
