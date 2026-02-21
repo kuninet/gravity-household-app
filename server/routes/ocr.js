@@ -9,10 +9,15 @@ require('dotenv').config();
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Configure Multer (Temporary storage)
+const ocrTmpDir = path.join(__dirname, '..', '.ocr_tmp');
+if (!fs.existsSync(ocrTmpDir)) {
+    fs.mkdirSync(ocrTmpDir);
+}
+
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        // Use system temp directory to avoid .gitignore restrictions by Gemini CLI
-        cb(null, os.tmpdir())
+        // Use a project-local directory not listed in .gitignore to satisfy Gemini CLI workspace rules
+        cb(null, ocrTmpDir)
     },
     filename: function (req, file, cb) {
         // Keep the original extension so Gemini CLI recognizes the file type (e.g. .pdf, .jpeg)
@@ -122,13 +127,13 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
             let cmd;
             if (process.platform === 'win32') {
                 // Windows (cmd.exe) does not support multi-line strings well and uses double quotes.
-                // Replace double quotes with single quotes to avoid escaping hell, and remove newlines.
-                const safePrompt = prompt.replace(/"/g, "'").replace(/\r?\n/g, ' ');
-                cmd = `gemini -p "${safePrompt} @${filePath}" --yolo -o json < NUL`;
+                // Replace double quotes with escaped double quotes and remove newlines. Remove NUL redirection to fix node-pty crashes.
+                const safePrompt = prompt.replace(/"/g, '\\"').replace(/\r?\n/g, ' ');
+                cmd = `gemini -p "${safePrompt} @${filePath}" --yolo -o json`;
             } else {
-                // Unix handles single-quoted multi-line strings easily
+                // Unix handles single-quoted multi-line strings easily. Remove /dev/null redirection.
                 const safePrompt = prompt.replace(/'/g, "'\\''");
-                cmd = `gemini -p '${safePrompt} @${filePath}' --yolo -o json < /dev/null`;
+                cmd = `gemini -p '${safePrompt} @${filePath}' --yolo -o json`;
             }
 
             jsonStr = await new Promise((resolve, reject) => {
