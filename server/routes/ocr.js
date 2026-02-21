@@ -47,7 +47,9 @@ function fileToGenerativePart(path, mimeType) {
 // Helper to get available models
 async function getAvailableModels() {
     let modelsArray = [
-        { id: "gemini-cli", name: "Gemini CLI (Google One AI Pro)" }
+        { id: "cli:gemini-2.5-flash", name: "Gemini CLI (2.5 Flash)" },
+        { id: "cli:gemini-2.0-flash", name: "Gemini CLI (2.0 Flash)" },
+        { id: "cli:default", name: "Gemini CLI (1.5 Pro / Default)" }
     ];
 
     if (!API_KEY) return modelsArray;
@@ -71,7 +73,9 @@ async function getAvailableModels() {
     }
     // Fallback list if API fails
     return [
-        { id: "gemini-cli", name: "Gemini CLI (Google One AI Pro)" },
+        { id: "cli:gemini-2.5-flash", name: "Gemini CLI (2.5 Flash)" },
+        { id: "cli:gemini-2.0-flash", name: "Gemini CLI (2.0 Flash)" },
+        { id: "cli:default", name: "Gemini CLI (1.5 Pro / Default)" },
         { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
         { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" },
         { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro" }
@@ -120,8 +124,10 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
 
         let jsonStr = "";
 
-        if (userModel === 'gemini-cli') {
-            console.log(`[OCR] Using Gemini CLI (Headless Mode)`);
+        if (userModel && userModel.startsWith('cli:')) {
+            const cliModelConfig = userModel.substring(4);
+            const modelFlag = cliModelConfig === 'default' ? '' : `-m ${cliModelConfig}`;
+            console.log(`[OCR] Using Gemini CLI (Headless Mode), Model: ${cliModelConfig}`);
             const filePath = path.resolve(req.file.path);
 
             let cmd;
@@ -129,11 +135,11 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
                 // Windows (cmd.exe) does not support multi-line strings well and uses double quotes.
                 // Replace double quotes with escaped double quotes and remove newlines. Remove NUL redirection to fix node-pty crashes.
                 const safePrompt = prompt.replace(/"/g, '\\"').replace(/\r?\n/g, ' ');
-                cmd = `gemini -p "${safePrompt} @${filePath}" --yolo -o json`;
+                cmd = `gemini -p "${safePrompt} @${filePath}" ${modelFlag} --yolo -o json`;
             } else {
                 // Unix handles single-quoted multi-line strings easily. Remove /dev/null redirection.
                 const safePrompt = prompt.replace(/'/g, "'\\''");
-                cmd = `gemini -p '${safePrompt} @${filePath}' --yolo -o json`;
+                cmd = `gemini -p '${safePrompt} @${filePath}' ${modelFlag} --yolo -o json`;
             }
 
             jsonStr = await new Promise((resolve, reject) => {

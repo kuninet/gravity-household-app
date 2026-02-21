@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 
 const props = defineProps({
   show: Boolean,
@@ -11,9 +11,17 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'apply'])
 
-const fileInput = ref(null)
-const selectedFile = ref(null)
-const isAnalyzing = ref(false)
+const analyzeMessages = [
+  "画像データを送信中...",
+  "AIモデルを準備して読み込み中...",
+  "画像内のテキストを抽出・解析中...",
+  "レシートの品目と金額を家計簿データに整理中...",
+  "AIが高精度な解析を行っています。しばらくお待ちください...",
+  "引き続きAIが思考中です。もうしばらくお待ちください..."
+]
+const analyzeMessage = ref("AI解析中...")
+const elapsedSeconds = ref(0)
+let analyzeMessageInterval = null
 const items = ref([]) // { id, description, amount, category_code, taxType }
 const totalAmount = ref(0)
 const detectedDate = ref('')
@@ -21,8 +29,9 @@ const detectedStore = ref('')
 const selectedModel = ref('')
 const availableModels = ref([])
 let nextId = 1
-
-import { watch, onMounted } from 'vue'
+const fileInput = ref(null)
+const selectedFile = ref(null)
+const isAnalyzing = ref(false)
 
 const fetchModels = async () => {
     try {
@@ -93,6 +102,24 @@ const analyze = async () => {
     isAnalyzing.value = true
     items.value = []
     
+    elapsedSeconds.value = 0
+    let msgIndex = 0
+    analyzeMessage.value = `${analyzeMessages[msgIndex]}`
+
+    analyzeMessageInterval = setInterval(() => {
+        elapsedSeconds.value++
+        
+        // Change message roughly every 8 seconds
+        if (elapsedSeconds.value % 8 === 0) {
+            msgIndex++
+            if (msgIndex >= analyzeMessages.length) {
+                // Loop the last few messages if it takes extremely long
+                msgIndex = analyzeMessages.length - 2
+            }
+        }
+        analyzeMessage.value = `${analyzeMessages[msgIndex]}`
+    }, 1000)
+    
     const formData = new FormData()
     formData.append('image', selectedFile.value)
     if (selectedModel.value) {
@@ -141,6 +168,9 @@ const analyze = async () => {
         alert('解析に失敗しました: ' + e.message)
     } finally {
         isAnalyzing.value = false
+        if (analyzeMessageInterval) clearInterval(analyzeMessageInterval)
+        analyzeMessage.value = "AI解析中..."
+        elapsedSeconds.value = 0
     }
 }
 
@@ -249,9 +279,11 @@ const apply = () => {
         </div>
 
         <!-- Loading -->
-        <div v-if="isAnalyzing" class="flex-1 flex flex-col items-center justify-center">
+        <div v-if="isAnalyzing" class="flex-1 flex flex-col items-center justify-center px-4">
             <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-            <p class="text-gray-600 font-bold">AI解析中...</p>
+            <p class="text-gray-600 font-bold mb-1">{{ analyzeMessage }}</p>
+            <p class="text-blue-500 font-semibold mb-3">経過時間: {{ elapsedSeconds }}秒</p>
+            <p v-if="selectedModel && selectedModel.startsWith('cli:')" class="text-gray-400 text-sm text-center">Gemini CLIをご利用の場合、数秒から数十秒お待ちいただく場合があります。</p>
         </div>
 
         <!-- Result Editor -->
