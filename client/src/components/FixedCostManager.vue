@@ -1,8 +1,19 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { fetchCategories, fetchFixedCostMatrix, updateFixedCostCell, updateFixedCostBatch } from '../api'
 
 const year = ref(new Date().getFullYear())
+const availableYears = computed(() => {
+    const currentYear = new Date().getFullYear()
+    const maxYear = Math.max(currentYear + 1, year.value)
+    const minYear = Math.min(currentYear - 10, year.value)
+    
+    const years = []
+    for (let i = maxYear; i >= minYear; i--) {
+        years.push(i)
+    }
+    return years
+})
 const categories = ref([])
 const matrix = ref({}) // { '01': { 601: 5000, 604: 80000 }, ... }
 const months = Array.from({length: 12}, (_, i) => String(i + 1).padStart(2, '0'))
@@ -169,9 +180,11 @@ const getGrandTotal = () => {
     <!-- Header -->
     <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl font-bold text-gray-700">固定費・公共料金入力</h2>
-        <div class="flex items-center space-x-4 bg-white p-2 rounded shadow">
+        <div class="flex items-center space-x-2 bg-white p-2 rounded shadow">
             <button @click="year--" class="px-3 py-1 hover:bg-gray-100 rounded text-gray-600">◀</button>
-            <span class="text-xl font-bold font-mono">{{ year }}年</span>
+            <select v-model="year" class="text-xl font-bold font-mono border-none bg-transparent cursor-pointer focus:ring-0 appearance-none text-center">
+                <option v-for="y in availableYears" :key="y" :value="y">{{ y }}年</option>
+            </select>
             <button @click="year++" class="px-3 py-1 hover:bg-gray-100 rounded text-gray-600">▶</button>
         </div>
     </div>
