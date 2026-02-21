@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { fetchTransactions, fetchCategories, fetchSummary } from './api'
 import { getFiscalMonth } from './utils'
 import TransactionForm from './components/TransactionForm.vue'
@@ -17,6 +17,28 @@ const summary = ref({ total: { income: 0, expense: 0, balance: 0 }, by_category:
 
 // Current fiscal month state (Use fiscal month of TODAY as default)
 const currentMonth = ref(getFiscalMonth(new Date()))
+
+const availableMonths = computed(() => {
+    const today = new Date()
+    const currentYear = today.getFullYear()
+    const selectedYear = parseInt(currentMonth.value.split('-')[0], 10)
+    
+    const maxYear = Math.max(currentYear + 1, selectedYear)
+    const minYear = Math.min(currentYear - 10, selectedYear)
+
+    const months = []
+    
+    for (let y = maxYear; y >= minYear; y--) {
+        for (let m = 12; m >= 1; m--) {
+            const val = `${y}-${String(m).padStart(2, '0')}`
+            months.push({
+                value: val,
+                label: `${y}年${m}月`
+            })
+        }
+    }
+    return months
+})
 
 const loadData = async () => {
     try {
@@ -103,7 +125,9 @@ const changeMonth = (offset) => {
                 <!-- Month Selector (Only for Dashboard) -->
                 <div v-if="currentView === 'dashboard'" class="flex items-center space-x-2 bg-blue-700 rounded p-1">
                     <button @click="changeMonth(-1)" class="px-3 py-1 hover:bg-blue-600 rounded">←</button>
-                    <span class="font-bold text-lg px-2">{{ currentMonth }}</span>
+                    <select v-model="currentMonth" class="font-bold text-lg px-2 bg-transparent text-white border-none cursor-pointer focus:ring-0 appearance-none text-center">
+                        <option v-for="m in availableMonths" :key="m.value" :value="m.value" class="text-black text-left">{{ m.label }}</option>
+                    </select>
                     <button @click="changeMonth(1)" class="px-3 py-1 hover:bg-blue-600 rounded">→</button>
                 </div>
             </div>

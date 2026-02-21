@@ -12,6 +12,18 @@ const visibleFixedCosts = ref(new Set())
 const colors = ['#41B883', '#E46651', '#00D8FF', '#DD1B16', '#FFCE56', '#8e44ad', '#3498db', '#95a5a6', '#f39c12', '#16a085']
 const getDatasetColor = (index) => colors[index % colors.length]
 
+const availableYears = computed(() => {
+    const currentYear = new Date().getFullYear()
+    const maxYear = Math.max(currentYear + 1, year.value)
+    const minYear = Math.min(currentYear - 10, year.value)
+    
+    const years = []
+    for (let i = maxYear; i >= minYear; i--) {
+        years.push(i)
+    }
+    return years
+})
+
 const loadData = async () => {
     try {
         analysisData.value = await fetchYearlyAnalysis(year.value)
@@ -89,9 +101,11 @@ const chartOptions = {
        <!-- Header/Selector -->
        <div class="flex items-center justify-between mb-4">
            <h2 class="text-xl font-bold text-gray-700">年次分析レポート</h2>
-           <div class="flex items-center space-x-4 bg-white p-2 rounded shadow">
+           <div class="flex items-center space-x-2 bg-white p-2 rounded shadow">
                <button @click="year--" class="px-3 py-1 hover:bg-gray-100 rounded text-gray-600">◀</button>
-               <span class="text-xl font-bold font-mono">{{ year }}年</span>
+               <select v-model="year" class="text-xl font-bold font-mono border-none bg-transparent cursor-pointer focus:ring-0 appearance-none text-center">
+                   <option v-for="y in availableYears" :key="y" :value="y">{{ y }}年</option>
+               </select>
                <button @click="year++" class="px-3 py-1 hover:bg-gray-100 rounded text-gray-600">▶</button>
            </div>
        </div>
