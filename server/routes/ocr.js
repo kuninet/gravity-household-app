@@ -3,11 +3,24 @@ const router = express.Router();
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const { exec } = require('child_process');
 require('dotenv').config();
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Configure Multer (Temporary storage)
-const upload = multer({ dest: 'uploads/' });
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        // Use system temp directory to avoid .gitignore restrictions by Gemini CLI
+        cb(null, os.tmpdir())
+    },
+    filename: function (req, file, cb) {
+        // Keep the original extension so Gemini CLI recognizes the file type (e.g. .pdf, .jpeg)
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname))
+    }
+});
+const upload = multer({ storage: storage });
 
 // Initialize Gemini
 const API_KEY = process.env.GEMINI_API_KEY;
@@ -28,24 +41,32 @@ function fileToGenerativePart(path, mimeType) {
 
 // Helper to get available models
 async function getAvailableModels() {
-    if (!API_KEY) return [];
+    let modelsArray = [
+        { id: "gemini-cli", name: "Gemini CLI (Google One AI Pro)" }
+    ];
+
+    if (!API_KEY) return modelsArray;
+
     try {
         // Use REST API to list models as SDK might not expose it easily in this version
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`);
         const data = await response.json();
         if (data.models) {
-            return data.models
+            const apiModels = data.models
                 .filter(m => m.name.includes('gemini') && m.supportedGenerationMethods.includes('generateContent'))
                 .map(m => ({
                     id: m.name.replace('models/', ''),
                     name: m.displayName
                 }));
+            modelsArray = modelsArray.concat(apiModels);
+            return modelsArray;
         }
     } catch (e) {
         console.error("Failed to fetch models:", e);
     }
     // Fallback list if API fails
     return [
+        { id: "gemini-cli", name: "Gemini CLI (Google One AI Pro)" },
         { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
         { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" },
         { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro" }
@@ -58,9 +79,6 @@ router.get('/models', async (req, res) => {
 });
 
 router.post('/analyze', upload.single('image'), async (req, res) => {
-    if (!API_KEY) {
-        return res.status(500).json({ error: "Server configuration error: API Key missing." });
-    }
     if (!req.file) {
         return res.status(400).json({ error: "No image file provided." });
     }
@@ -95,41 +113,97 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
         const userModel = req.body.model;
         console.log(`[OCR] Request received. Selected model: ${userModel || 'None (Using default)'}`);
 
-        let modelsToTry = ["gemini-2.0-flash", "gemini-1.5-flash"]; // Default fallback chain
+        let jsonStr = "";
 
-        if (userModel) {
-            modelsToTry = [userModel];
-        }
+        if (userModel === 'gemini-cli') {
+            console.log(`[OCR] Using Gemini CLI (Headless Mode)`);
+            const filePath = path.resolve(req.file.path);
 
-        console.log(`[OCR] Models to try: ${JSON.stringify(modelsToTry)}`);
-
-        let result = null;
-        let lastError = null;
-
-        for (const modelName of modelsToTry) {
-            try {
-                console.log(`Trying model: ${modelName}`);
-                const model = genAI.getGenerativeModel({ model: modelName });
-                const imagePart = fileToGenerativePart(req.file.path, req.file.mimetype);
-                result = await model.generateContent([prompt, imagePart]);
-                if (result) break; // Success
-            } catch (e) {
-                console.warn(`Model ${modelName} failed:`, e.message);
-                lastError = e;
+            let cmd;
+            if (process.platform === 'win32') {
+                // Windows (cmd.exe) does not support multi-line strings well and uses double quotes.
+                // Replace double quotes with single quotes to avoid escaping hell, and remove newlines.
+                const safePrompt = prompt.replace(/"/g, "'").replace(/\r?\n/g, ' ');
+                cmd = `gemini -p "${safePrompt} @${filePath}" --yolo -o json < NUL`;
+            } else {
+                // Unix handles single-quoted multi-line strings easily
+                const safePrompt = prompt.replace(/'/g, "'\\''");
+                cmd = `gemini -p '${safePrompt} @${filePath}' --yolo -o json < /dev/null`;
             }
-        }
 
-        if (!result) {
-            throw new Error(`All models failed. Last error: ${lastError?.message}`);
+            jsonStr = await new Promise((resolve, reject) => {
+                // gemini CLI command could take a while
+                exec(cmd, { cwd: process.cwd(), maxBuffer: 1024 * 1024 * 5, timeout: 120000 }, (error, stdout, stderr) => {
+                    if (error) {
+                        console.error("[OCR] gemini CLI command failed:", error);
+                        console.error("[OCR] CLI STDERR:", stderr);
+                        reject(new Error(`Gemini CLI failed: ${error.message}`));
+                        return;
+                    }
+                    try {
+                        const cliResult = JSON.parse(stdout);
+                        // The gemini CLI JSON output contains a "response" field with markdown wrapped json string
+                        const responseString = cliResult.response || "";
+                        let innerJsonStr = responseString.replace(/```json/g, '').replace(/```/g, '').trim();
+                        // If it's empty but API call succeeded, that's what we have
+                        resolve(innerJsonStr || "{\n  \"items\": [],\n  \"date\": null,\n  \"store\": null\n}");
+                    } catch (parseErr) {
+                        console.error("[OCR] Failed to parse internal CLI result JSON:", parseErr);
+                        console.error("[OCR] Raw CLI STDOUT:", stdout);
+                        reject(parseErr);
+                    }
+                });
+            });
+
+            // Pre-validate the extracted json to avoid 500 downstream if it's just raw text
+            try {
+                JSON.parse(jsonStr);
+            } catch (e) {
+                console.warn("[OCR] CLI output is not valid JSON, returning empty items.", jsonStr);
+                jsonStr = '{"items": [], "date": null, "store": null}';
+            }
+
+        } else {
+            console.log(`[OCR] Using Internal @google/generative-ai SDK`);
+            if (!API_KEY) {
+                throw new Error("Server configuration error: API Key missing for SDK model.");
+            }
+            let modelsToTry = ["gemini-2.0-flash", "gemini-1.5-flash"]; // Default fallback chain
+
+            if (userModel && userModel !== 'gemini-cli') {
+                modelsToTry = [userModel];
+            }
+
+            console.log(`[OCR] Models to try: ${JSON.stringify(modelsToTry)}`);
+
+            let result = null;
+            let lastError = null;
+
+            for (const modelName of modelsToTry) {
+                try {
+                    console.log(`Trying model: ${modelName}`);
+                    const model = genAI.getGenerativeModel({ model: modelName });
+                    const imagePart = fileToGenerativePart(req.file.path, req.file.mimetype);
+                    result = await model.generateContent([prompt, imagePart]);
+                    if (result) break; // Success
+                } catch (e) {
+                    console.warn(`Model ${modelName} failed:`, e.message);
+                    lastError = e;
+                }
+            }
+
+            if (!result) {
+                throw new Error(`All models failed. Last error: ${lastError?.message}`);
+            }
+            const response = await result.response;
+            const text = response.text();
+            jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
         }
-        const response = await result.response;
-        const text = response.text();
 
         // Cleanup uploaded file
         fs.unlinkSync(req.file.path);
 
-        // Parse JSON from text (Gemini might wrap in ```json ... ```)
-        let jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        // Parse extracted JSON
         const data = JSON.parse(jsonStr);
 
         res.json(data);

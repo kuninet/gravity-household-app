@@ -1,2 +1,5 @@
 node_modules
 wk*.*
+.DS_Store
+temp*
+test*
