@@ -12,7 +12,7 @@ const categories = [
     { code: 402, name: '本', group: '交際費' },
     { code: 500, name: '医療費', group: '医療費' },
     { code: 900, name: 'その他', group: 'その他' },
-    { code: 901, name: '小遣い', group: 'その他' },
+    { code: 901, name: '小遣い', group: '固定費' },
     // Income
     { code: 700, name: '給与', group: '収入' },
     { code: 701, name: 'ボーナス', group: '収入' },
