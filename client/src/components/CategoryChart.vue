@@ -15,6 +15,7 @@ const props = defineProps({
 import { computed } from 'vue'
 
 const positiveData = computed(() => props.data.filter(d => d.total > 0))
+const nonPositiveData = computed(() => props.data.filter(d => d.total <= 0))
 
 const chartData = computed(() => {
     return {
@@ -38,7 +39,12 @@ const options = {
   <div class="h-64">
     <Doughnut :data="chartData" :options="options" v-if="positiveData.length > 0" />
     <div v-else class="h-full flex items-center justify-center text-gray-400">
-        データがありません
+        正の支出カテゴリがありません
+    </div>
+    <div v-if="nonPositiveData.length > 0" class="mt-2 text-xs text-gray-500 space-y-1">
+        <div v-for="item in nonPositiveData" :key="item.group_name">
+            {{ item.group_name }}: ¥{{ item.total.toLocaleString() }}
+        </div>
     </div>
   </div>
 </template>

@@ -67,9 +67,9 @@ const refreshRecent = async () => {
     }
 }
 
-const toValidTransactionAmount = (amount) => {
+const toValidMainAmount = (amount) => {
     const value = Number(amount)
-    if (!Number.isFinite(value) || value === 0) return null
+    if (!Number.isFinite(value) || value <= 0) return null
     return value
 }
 
@@ -89,7 +89,7 @@ const submit = async () => {
   isSubmitting.value = true
   try {
     // 1. Submit main transaction (calculated amount)
-    const mainAmount = toValidTransactionAmount(form.value.amount)
+    const mainAmount = toValidMainAmount(form.value.amount)
     if (mainAmount !== null) {
         await createTransaction({
             ...form.value,
