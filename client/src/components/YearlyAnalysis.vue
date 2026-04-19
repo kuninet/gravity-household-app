@@ -139,7 +139,7 @@ const chartOptions = {
                             {{ g.total.toLocaleString() }}
                         </td>
                         <td v-for="(amt, i) in g.data" :key="i" class="p-2 border text-right font-mono text-gray-600">
-                            {{ amt > 0 ? amt.toLocaleString() : '-' }}
+                            {{ amt !== 0 ? amt.toLocaleString() : '-' }}
                         </td>
                     </tr>
                 </tbody>
@@ -224,7 +224,7 @@ const chartOptions = {
                             {{ g.total.toLocaleString() }}
                         </td>
                         <td v-for="(amt, i) in g.data" :key="i" class="p-2 border text-right font-mono text-gray-600">
-                            {{ amt > 0 ? amt.toLocaleString() : '-' }}
+                            {{ amt !== 0 ? amt.toLocaleString() : '-' }}
                         </td>
                     </tr>
                 </tbody>

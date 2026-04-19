@@ -27,6 +27,33 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
+function parseAmount(value) {
+    if (typeof value === 'number') return value;
+    if (typeof value !== 'string') return NaN;
+
+    const normalized = value.replace(/,/g, '').trim();
+    if (!normalized) return NaN;
+    return Number(normalized);
+}
+
+function normalizeOcrData(data) {
+    if (!data || !Array.isArray(data.items)) return data;
+
+    data.items = data.items.map((item) => {
+        const parsedAmount = parseAmount(item.amount);
+        const amount = Number.isFinite(parsedAmount) ? parsedAmount : item.amount;
+        const isDiscount = Number(amount) < 0;
+
+        return {
+            ...item,
+            amount,
+            taxType: isDiscount ? 'INCLUDED' : item.taxType,
+        };
+    });
+
+    return data;
+}
+
 // Initialize Gemini
 const API_KEY = process.env.GEMINI_API_KEY;
 if (!API_KEY) {
@@ -96,10 +123,12 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
         const prompt = `
         Analyze this receipt image and extract the items purchased, the date, and the store name.
         Return ONLY a JSON object with keys "items", "date", and "store".
-        
+
         "items": An array of objects, where each object has:
         - "description": The name of the item (string)
         - "amount": The price of the item (number, remove currency symbols)
+        - Discounts, coupons, rebates, or price reductions must be included as line items with negative amounts.
+        - Negative amounts are already tax-included. Do not adjust them for tax.
         
         "date": The date of the receipt in YYYY-MM-DD format (string). If year is missing, guess current year. If unknown, return null.
         "store": The name of the store (string). If unknown, return null.
@@ -113,8 +142,8 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
             { "description": "Milk", "amount": 200 }
           ]
         }
-        
-        Ignore total amounts, taxes, or change for the items list. Just list the line items.
+
+        Ignore total amounts, taxes, or change for the items list. Just list the line items and discounts.
         If the image is not a receipt or unreadable, return {"items": [], "date": null, "store": null}.
         `;
 
@@ -217,7 +246,7 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
         // Parse extracted JSON
         const data = JSON.parse(jsonStr);
 
-        res.json(data);
+        res.json(normalizeOcrData(data));
 
     } catch (error) {
         console.error("OCR Error:", error);

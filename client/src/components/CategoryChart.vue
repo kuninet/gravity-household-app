@@ -14,13 +14,15 @@ const props = defineProps({
 // Transform props data to Chart.js format
 import { computed } from 'vue'
 
+const positiveData = computed(() => props.data.filter(d => d.total > 0))
+
 const chartData = computed(() => {
     return {
-        labels: props.data.map(d => d.group_name),
+        labels: positiveData.value.map(d => d.group_name),
         datasets: [
             {
                 backgroundColor: ['#41B883', '#E46651', '#00D8FF', '#DD1B16', '#FFCE56', '#8e44ad', '#3498db'],
-                data: props.data.map(d => d.total)
+                data: positiveData.value.map(d => d.total)
             }
         ]
     }
@@ -34,7 +36,7 @@ const options = {
 
 <template>
   <div class="h-64">
-    <Doughnut :data="chartData" :options="options" v-if="data.length > 0" />
+    <Doughnut :data="chartData" :options="options" v-if="positiveData.length > 0" />
     <div v-else class="h-full flex items-center justify-center text-gray-400">
         データがありません
     </div>

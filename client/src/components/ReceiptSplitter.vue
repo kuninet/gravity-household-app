@@ -23,6 +23,16 @@ const totalAmount = ref('')
 const items = ref([]) // { id, amount, taxType, category_code, description }
 let nextId = 1
 
+const isNegativeAmount = (amount) => Number(amount) < 0
+
+const normalizeDiscountItems = () => {
+    items.value.forEach((item) => {
+        if (isNegativeAmount(item.amount)) {
+            item.taxType = 'INCLUDED'
+        }
+    })
+}
+
 // Watch for show to reset or set initial values
 watch(() => props.show, (newVal) => {
     if (newVal) {
@@ -35,6 +45,7 @@ watch(() => props.show, (newVal) => {
         if (props.initialItems && props.initialItems.length > 0) {
             // Deep copy to avoid mutating prop directly
             items.value = JSON.parse(JSON.stringify(props.initialItems))
+            normalizeDiscountItems()
             // Ensure nextId is safe
             const maxId = Math.max(...items.value.map(i => i.id || 0))
             nextId = maxId + 1
@@ -44,6 +55,8 @@ watch(() => props.show, (newVal) => {
         }
     }
 })
+
+watch(items, normalizeDiscountItems, { deep: true })
 
 const addItem = () => {
     items.value.push({
@@ -60,6 +73,11 @@ const removeItem = (index) => {
 }
 
 const onCategoryChange = (item) => {
+    if (isNegativeAmount(item.amount)) {
+        item.taxType = 'INCLUDED'
+        return
+    }
+
     // Smart Tax Default
     const code = Number(item.category_code)
     // If Food (100-199) excluding Alcohol (105), default to 8% tax excluded
@@ -73,11 +91,18 @@ const onCategoryChange = (item) => {
     }
 }
 
+const onAmountInput = (item) => {
+    if (isNegativeAmount(item.amount)) {
+        item.taxType = 'INCLUDED'
+    }
+}
+
 // Calculate tax included amount for an item
 const calculateItemTotal = (item) => {
     const amt = Number(item.amount)
-    if (!amt) return 0
+    if (!Number.isFinite(amt) || amt === 0) return 0
 
+    if (amt < 0) return amt
     if (item.taxType === 'INCLUDED') return amt
     if (item.taxType === 'EXCLUDED_8') return Math.floor(amt * 1.08)
     if (item.taxType === 'EXCLUDED_10') return Math.floor(amt * 1.10)
@@ -150,10 +175,10 @@ const apply = () => {
                                 <input type="text" v-model="item.description" class="border rounded p-1 w-full" placeholder="品名">
                             </td>
                             <td class="p-1">
-                                <input type="number" v-model="item.amount" class="border rounded p-1 w-full text-right" placeholder="0">
+                                <input type="number" v-model="item.amount" @input="onAmountInput(item)" class="border rounded p-1 w-full text-right" placeholder="0">
                             </td>
                             <td class="p-1">
-                                <select v-model="item.taxType" class="border rounded p-1 w-full">
+                                <select v-model="item.taxType" class="border rounded p-1 w-full" :disabled="isNegativeAmount(item.amount)">
                                     <option value="INCLUDED">税込</option>
                                     <option value="EXCLUDED_8">税抜8%</option>
                                     <option value="EXCLUDED_10">税抜10%</option>

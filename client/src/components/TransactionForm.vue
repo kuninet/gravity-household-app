@@ -67,35 +67,44 @@ const refreshRecent = async () => {
     }
 }
 
+const toValidTransactionAmount = (amount) => {
+    const value = Number(amount)
+    if (!Number.isFinite(value) || value === 0) return null
+    return value
+}
+
+const calculateTaxIncludedAmount = (item) => {
+    const amt = Number(item.amount)
+    if (!Number.isFinite(amt) || amt === 0) return null
+    if (amt < 0) return amt
+    if (item.taxType === 'INCLUDED') return amt
+    if (item.taxType === 'EXCLUDED_8') return Math.floor(amt * 1.08)
+    if (item.taxType === 'EXCLUDED_10') return Math.floor(amt * 1.10)
+    return amt
+}
+
 // Submit
 const submit = async () => {
   if (isSubmitting.value) return
   isSubmitting.value = true
   try {
     // 1. Submit main transaction (calculated amount)
-    if (form.value.amount > 0) {
-        await createTransaction(form.value)
+    const mainAmount = toValidTransactionAmount(form.value.amount)
+    if (mainAmount !== null) {
+        await createTransaction({
+            ...form.value,
+            amount: mainAmount
+        })
     }
 
     // 2. Submit Splitter Items (if any)
     if (splitterState.value.items.length > 0) {
-        // Calculate item totals again helper
-        // (Logic duplicated from Splitter, but safest to recalculate or store calculated val. 
-        // Splitter didn't return calculated, only taxType/amount. So we recalculate.)
-        const calc = (item) => {
-            const amt = Number(item.amount)
-            if (item.taxType === 'INCLUDED') return amt
-            if (item.taxType === 'EXCLUDED_8') return Math.floor(amt * 1.08)
-            if (item.taxType === 'EXCLUDED_10') return Math.floor(amt * 1.10)
-            return amt
-        }
-
         for (const item of splitterState.value.items) {
            // Skip if invalid category
            if (!item.category_code) continue
            
-           const amount = calc(item)
-           if (amount <= 0) continue
+           const amount = calculateTaxIncludedAmount(item)
+           if (amount === null) continue
 
            // Determine type based on category
            const code = Number(item.category_code)
