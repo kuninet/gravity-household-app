@@ -3,3 +3,7 @@ wk*.*
 .DS_Store
 temp*
 test*
+!tests/
+!tests/**
+/test-results/
+/playwright-report/
