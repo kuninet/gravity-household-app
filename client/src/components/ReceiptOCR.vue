@@ -85,6 +85,8 @@ watch(() => props.show, (newVal) => {
 const taxMode = ref('INCLUDED') // INCLUDED or EXCLUDED
 const isDragging = ref(false)
 
+const isNegativeAmount = (amount) => Number(amount) < 0
+
 const onFileChange = (e) => {
     selectedFile.value = e.target.files[0]
 }
@@ -141,12 +143,15 @@ const analyze = async () => {
         // Map to internal format
         if (data.items) {
             items.value = data.items.map(item => {
+                const amount = Number(item.amount)
                 // Smart Tax Logic
                 // Default category 100 (Food)
                 const categoryCode = 100;
                 let finalTaxType = 'INCLUDED';
 
-                if (taxMode.value === 'EXCLUDED') {
+                if (isNegativeAmount(amount)) {
+                    finalTaxType = 'INCLUDED';
+                } else if (taxMode.value === 'EXCLUDED') {
                     // If Food (100-199), use 8%, otherwise 10%
                     if (categoryCode >= 100 && categoryCode < 200) {
                         finalTaxType = 'EXCLUDED_8';
@@ -158,7 +163,7 @@ const analyze = async () => {
                 return {
                     id: nextId++,
                     description: item.description,
-                    amount: item.amount,
+                    amount: Number.isFinite(amount) ? amount : item.amount,
                     category_code: categoryCode, 
                     taxType: finalTaxType
                 }
@@ -175,6 +180,11 @@ const analyze = async () => {
 }
 
 const updateTaxType = (item) => {
+    if (isNegativeAmount(item.amount)) {
+        item.taxType = 'INCLUDED'
+        return
+    }
+
     if (taxMode.value !== 'EXCLUDED') return
 
     const code = Number(item.category_code)
@@ -193,6 +203,8 @@ const removeItem = (index) => {
 const calculatedTotal = computed(() => {
     return items.value.reduce((sum, item) => {
         const amt = Number(item.amount || 0)
+        if (!Number.isFinite(amt) || amt === 0) return sum
+        if (amt < 0) return sum + amt
         // Check taxType assigned during analysis
         if (item.taxType === 'EXCLUDED_8') return sum + Math.floor(amt * 1.08)
         if (item.taxType === 'EXCLUDED_10') return sum + Math.floor(amt * 1.10)
@@ -327,7 +339,7 @@ const apply = () => {
                                 <input type="text" v-model="item.description" class="border rounded p-1 w-full">
                             </td>
                             <td class="p-2">
-                                <input type="number" v-model="item.amount" class="border rounded p-1 w-full text-right">
+                                <input type="number" v-model="item.amount" @input="updateTaxType(item)" class="border rounded p-1 w-full text-right">
                             </td>
                             <td class="p-2 text-center">
                                 <button @click="removeItem(index)" class="text-red-500 hover:text-red-700">×</button>
