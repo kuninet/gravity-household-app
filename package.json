@@ -12,6 +12,7 @@
     "seed": "npm run seed --prefix server",
     "test:e2e": "node scripts/run-e2e.js",
     "test:e2e:discount": "npm run seed && node scripts/run-e2e.js tests/e2e/negative-discount.test.js --project=chromium",
+    "test:e2e:multi-year": "npm run seed && node scripts/run-e2e.js tests/e2e/multi-year-analysis.test.js --project=chromium",
     "test:e2e:headed": "node scripts/run-e2e.js --headed",
     "test:e2e:debug": "node scripts/run-e2e.js --debug"
   },
