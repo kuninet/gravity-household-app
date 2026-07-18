@@ -6,6 +6,14 @@ const props = defineProps({
   categories: {
       type: Array,
       default: () => []
+  },
+  // Preselect a file when the modal opens (e.g. dragged onto TransactionForm).
+  // Cleared on close so the user can pick a different file next time.
+  // Typed as Object to avoid referring to the browser-only File constructor at
+  // module evaluation time (SSR / unit-test friendliness).
+  initialFile: {
+      type: Object,
+      default: null
   }
 })
 
@@ -71,12 +79,12 @@ watch(() => props.show, (newVal) => {
     if (newVal) {
         // Reset state when opened
         items.value = []
-        selectedFile.value = null
+        selectedFile.value = props.initialFile || null
         isAnalyzing.value = false
         detectedDate.value = ''
         detectedStore.value = ''
         if (fileInput.value) fileInput.value.value = ''
-        
+
         // Refresh models when opening
         fetchModels()
     }
