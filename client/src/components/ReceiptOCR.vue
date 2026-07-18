@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
   show: Boolean,
@@ -34,12 +34,17 @@ const items = ref([]) // { id, description, amount, category_code, taxType }
 const totalAmount = ref(0)
 const detectedDate = ref('')
 const detectedStore = ref('')
+const detectedTaxHint = ref(null) // "included" | "excluded" | "mixed" | null (issue #26)
 const selectedModel = ref('')
 const availableModels = ref([])
 let nextId = 1
 const fileInput = ref(null)
 const selectedFile = ref(null)
 const isAnalyzing = ref(false)
+
+// Preview state (issue #26). Populated from selectedFile via a watch below.
+const previewUrl = ref('')
+const previewKind = ref('') // 'pdf' | 'image' | ''
 
 const fetchModels = async () => {
     try {
@@ -83,12 +88,44 @@ watch(() => props.show, (newVal) => {
         isAnalyzing.value = false
         detectedDate.value = ''
         detectedStore.value = ''
+        detectedTaxHint.value = null
+        taxMode.value = 'INCLUDED' // reset default; overridden after analysis by data.tax_included
         if (fileInput.value) fileInput.value.value = ''
 
         // Refresh models when opening
         fetchModels()
     }
 })
+
+// Manage preview object URL lifecycle (issue #26).
+watch(selectedFile, (file) => {
+    if (previewUrl.value) {
+        URL.revokeObjectURL(previewUrl.value)
+        previewUrl.value = ''
+    }
+    previewKind.value = ''
+    if (!file) return
+
+    const mime = (file.type || '').toLowerCase()
+    const name = file.name || ''
+    if (mime === 'application/pdf' || /\.pdf$/i.test(name)) {
+        previewKind.value = 'pdf'
+    } else if (mime.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif|gif)$/i.test(name)) {
+        previewKind.value = 'image'
+    }
+    if (previewKind.value) {
+        previewUrl.value = URL.createObjectURL(file)
+    }
+})
+
+onBeforeUnmount(() => {
+    if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+})
+
+const clearSelectedFile = () => {
+    selectedFile.value = null
+    if (fileInput.value) fileInput.value.value = ''
+}
 
 const taxMode = ref('INCLUDED') // INCLUDED or EXCLUDED
 const isDragging = ref(false)
@@ -179,10 +216,15 @@ const analyze = async () => {
         if (!res.ok) throw new Error('Analysis failed')
         const data = await res.json()
         
-        // Extract date, store, and store category hint
+        // Extract date, store, and hints
         detectedDate.value = data.date || ''
         detectedStore.value = data.store || ''
         const storeHint = data.store_category_hint || null
+        // Adopt LLM's tax judgement as the initial global tax mode (issue #26).
+        // "mixed" and null fall back to INCLUDED (safer: no synthetic tax added).
+        const taxIncludedHint = data.tax_included || null
+        detectedTaxHint.value = taxIncludedHint
+        taxMode.value = taxIncludedHint === 'excluded' ? 'EXCLUDED' : 'INCLUDED'
 
         // Map to internal format
         if (data.items) {
@@ -227,16 +269,30 @@ const updateTaxType = (item) => {
         item.taxType = 'INCLUDED'
         return
     }
-
-    if (taxMode.value !== 'EXCLUDED') return
-
+    // Fully derive taxType from current mode so switching the global toggle
+    // (issue #26) also resets EXCLUDED items back to INCLUDED.
+    if (taxMode.value === 'INCLUDED') {
+        item.taxType = 'INCLUDED'
+        return
+    }
+    // EXCLUDED: food 100-199 excluding alcohol (105) is 8%, others 10%.
     const code = Number(item.category_code)
-    // Food (100-199) is 8%, but Alcohol (105) is 10%
     if (code >= 100 && code < 200 && code !== 105) {
         item.taxType = 'EXCLUDED_8'
     } else {
         item.taxType = 'EXCLUDED_10'
     }
+}
+
+const applyTaxModeToAll = () => {
+    items.value.forEach(updateTaxType)
+}
+
+const taxHintLabel = (hint) => {
+    if (hint === 'included') return '税込'
+    if (hint === 'excluded') return '税抜'
+    if (hint === 'mixed') return '混在'
+    return '不明'
 }
 
 const removeItem = (index) => {
@@ -279,58 +335,53 @@ const apply = () => {
     <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl p-6 h-[90vh] flex flex-col">
         <h3 class="text-lg font-bold mb-4 text-gray-700">レシート自動解析 (AI)</h3>
         
-        <!-- Upload Area -->
-        <div v-if="items.length === 0 && !isAnalyzing" 
-             class="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-10 bg-gray-50 transition-colors"
-             :class="{ 'bg-blue-50 border-blue-400': isDragging }"
-             @dragover.prevent="isDragging = true"
-             @dragleave.prevent="isDragging = false"
-             @drop.prevent="onDrop"
-        >
+        <!-- Upload / Preview Area (issue #26) -->
+        <div v-if="items.length === 0 && !isAnalyzing" class="flex-1 flex flex-col min-h-0 mb-4">
             <input type="file" ref="fileInput" @change="onFileChange" accept="image/*,application/pdf" class="hidden">
-            
-            <div v-if="!selectedFile" class="text-center">
-                <button @click="$refs.fileInput.click()" class="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 mb-4">
-                    画像・PDFを選択
-                </button>
-                <p class="text-gray-500 text-sm">またはファイルをドロップしてください</p>
-            </div>
-            
-            <div v-else class="text-center">
-                <div class="text-4xl mb-3">📄</div>
-                <p class="font-bold text-gray-700 mb-4">{{ selectedFile.name }}</p>
-                <button @click="selectedFile = null; $refs.fileInput.value = ''" class="text-red-500 hover:underline text-sm">
-                    キャンセル
-                </button>
-            </div>
-        </div>
-        
-        <!-- Tax Mode Setting (Visible before analysis) -->
-        <!-- Settings (Tax & Model) -->
-        <div v-if="!isAnalyzing && items.length === 0" class="mb-4 bg-gray-50 p-3 rounded flex flex-col md:flex-row justify-between items-center gap-2">
-            
-            <!-- Tax Mode -->
-            <div>
-                 <span class="text-sm font-bold text-gray-700 mr-2">読み取る金額は:</span>
-                 <label class="inline-flex items-center mr-4 cursor-pointer">
-                     <input type="radio" v-model="taxMode" value="INCLUDED" class="mr-1">
-                     <span class="text-sm">税込</span>
-                 </label>
-                 <label class="inline-flex items-center cursor-pointer">
-                     <input type="radio" v-model="taxMode" value="EXCLUDED" class="mr-1">
-                     <span class="text-sm">税抜 (食費8%/他10%)</span>
-                 </label>
+
+            <!-- No file selected: drop zone -->
+            <div v-if="!selectedFile"
+                 class="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-10 bg-gray-50 transition-colors"
+                 :class="{ 'bg-blue-50 border-blue-400': isDragging }"
+                 @dragover.prevent="isDragging = true"
+                 @dragleave.prevent="isDragging = false"
+                 @drop.prevent="onDrop"
+            >
+                <div class="text-center">
+                    <button @click="$refs.fileInput.click()" class="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 mb-4">
+                        画像・PDFを選択
+                    </button>
+                    <p class="text-gray-500 text-sm">またはファイルをドロップしてください</p>
+                </div>
             </div>
 
-            <!-- Model Selection -->
-            <div class="flex items-center">
-                 <label class="text-sm font-bold text-gray-700 mr-2">モデル:</label>
-                 <select v-model="selectedModel" class="border rounded p-1 text-sm max-w-[200px]">
-                     <option v-for="model in availableModels" :key="model.id" :value="model.id">
-                         {{ model.name.replace('Gemini ', '') }}
-                     </option>
-                 </select>
+            <!-- File selected: preview -->
+            <div v-else class="flex-1 flex flex-col min-h-0">
+                <div class="mb-2 flex items-center justify-between px-1">
+                    <p class="font-bold text-gray-700 truncate">📄 {{ selectedFile.name }}</p>
+                    <button @click="clearSelectedFile" class="text-red-500 hover:underline text-sm whitespace-nowrap ml-3">
+                        別のファイルを選ぶ
+                    </button>
+                </div>
+                <div class="flex-1 min-h-0 bg-gray-50 border rounded overflow-hidden">
+                    <iframe v-if="previewKind === 'pdf'" :src="previewUrl" class="w-full h-full" title="PDF プレビュー"></iframe>
+                    <img v-else-if="previewKind === 'image'" :src="previewUrl" class="w-full h-full object-contain bg-white" alt="画像プレビュー">
+                    <div v-else class="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                        <div class="text-6xl mb-2">📄</div>
+                        <div class="text-sm">プレビュー非対応の形式です</div>
+                    </div>
+                </div>
             </div>
+        </div>
+
+        <!-- Model Selection (Visible before analysis) -->
+        <div v-if="!isAnalyzing && items.length === 0" class="mb-4 bg-gray-50 p-3 rounded flex items-center justify-end">
+            <label class="text-sm font-bold text-gray-700 mr-2">モデル:</label>
+            <select v-model="selectedModel" class="border rounded p-1 text-sm max-w-[200px]">
+                <option v-for="model in availableModels" :key="model.id" :value="model.id">
+                    {{ model.name.replace('Gemini ', '') }}
+                </option>
+            </select>
         </div>
 
         <!-- Loading -->
@@ -346,6 +397,25 @@ const apply = () => {
             <div class="mb-2 flex justify-between items-center">
                 <h4 class="font-bold text-gray-600">解析結果の確認・修正</h4>
                 <div class="text-sm text-gray-500">合計: {{ calculatedTotal.toLocaleString() }}</div>
+            </div>
+
+            <!-- Global tax toggle (issue #26): initialized from LLM's tax_included -->
+            <div class="mb-3 bg-gray-50 p-2 rounded flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                <span class="font-bold text-gray-700">全体の税区分:</span>
+                <label class="inline-flex items-center cursor-pointer">
+                    <input type="radio" v-model="taxMode" value="INCLUDED" @change="applyTaxModeToAll" class="mr-1">
+                    税込
+                </label>
+                <label class="inline-flex items-center cursor-pointer">
+                    <input type="radio" v-model="taxMode" value="EXCLUDED" @change="applyTaxModeToAll" class="mr-1">
+                    税抜 (食費8%/他10%)
+                </label>
+                <span v-if="detectedTaxHint" class="text-xs text-gray-500">
+                    (AI 判定: {{ taxHintLabel(detectedTaxHint) }})
+                </span>
+                <span v-if="detectedTaxHint === 'mixed'" class="text-xs text-orange-600">
+                    ※ 税込/税抜が混在の可能性。明細ごとに確認してください。
+                </span>
             </div>
 
             <div class="mb-4 bg-gray-50 p-3 rounded flex space-x-4">
