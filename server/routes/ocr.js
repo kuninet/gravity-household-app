@@ -121,30 +121,46 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
 
     try {
         const prompt = `
-        Analyze this receipt image and extract the items purchased, the date, and the store name.
-        Return ONLY a JSON object with keys "items", "date", and "store".
+        Analyze this receipt image and extract the items purchased, the date, the store name, and category hints.
+        Return ONLY a JSON object with keys "items", "date", "store", and "store_category_hint".
 
         "items": An array of objects, where each object has:
         - "description": The name of the item (string)
         - "amount": The price of the item (number, remove currency symbols)
+        - "category_hint": ONE of the following labels that best matches the item, or null if unclear:
+          - "food" (groceries, ingredients)
+          - "dining_out" (prepared meals eaten at a restaurant / takeout / delivery)
+          - "alcohol" (beer, wine, sake, spirits, chuhai)
+          - "daily_goods" (toiletries, cleaning, cosmetics, paper, batteries, tissues)
+          - "medical" (drugs, medicine, prescriptions, medical supplies)
+          - "transport" (fares, tolls, taxis, parking)
+          - "entertainment" (books, movies, hobbies, games)
+          - "other"
         - Discounts, coupons, rebates, or price reductions must be included as line items with negative amounts.
         - Negative amounts are already tax-included. Do not adjust them for tax.
-        
+
         "date": The date of the receipt in YYYY-MM-DD format (string). If year is missing, guess current year. If unknown, return null.
         "store": The name of the store (string). If unknown, return null.
+        "store_category_hint": ONE of "grocery", "drugstore", "convenience", "restaurant", "pharmacy", "other", or null if unclear.
+          - "drugstore" / "pharmacy" are stores like マツモトキヨシ / ウエルシア / スギ薬局 whose main goods are daily goods and OTC medicine.
+          - "grocery" is a supermarket (イオン / ライフ / 業務スーパー etc).
+          - "convenience" is a konbini (セブンイレブン / ローソン / ファミマ etc).
+          - "restaurant" is a sit-down or takeaway food service.
 
         Example format:
         {
-          "store": "Supermarket ABC",
+          "store": "マツモトキヨシ",
+          "store_category_hint": "drugstore",
           "date": "2024-05-20",
           "items": [
-            { "description": "Apple", "amount": 100 },
-            { "description": "Milk", "amount": 200 }
+            { "description": "ティッシュ", "amount": 300, "category_hint": "daily_goods" },
+            { "description": "風邪薬", "amount": 800, "category_hint": "medical" },
+            { "description": "おにぎり", "amount": 150, "category_hint": "food" }
           ]
         }
 
         Ignore total amounts, taxes, or change for the items list. Just list the line items and discounts.
-        If the image is not a receipt or unreadable, return {"items": [], "date": null, "store": null}.
+        If the image is not a receipt or unreadable, return {"items": [], "date": null, "store": null, "store_category_hint": null}.
         `;
 
         // Determine model to use
