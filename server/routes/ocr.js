@@ -121,8 +121,8 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
 
     try {
         const prompt = `
-        Analyze this receipt image and extract the items purchased, the date, the store name, and category hints.
-        Return ONLY a JSON object with keys "items", "date", "store", and "store_category_hint".
+        Analyze this receipt image and extract the items purchased, the date, the store name, category hints, and whether item amounts include tax.
+        Return ONLY a JSON object with keys "items", "date", "store", "store_category_hint", and "tax_included".
 
         "items": An array of objects, where each object has:
         - "description": The name of the item (string)
@@ -147,10 +147,17 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
           - "convenience" is a konbini (セブンイレブン / ローソン / ファミマ etc).
           - "restaurant" is a sit-down or takeaway food service.
 
+        "tax_included": ONE of "included", "excluded", "mixed", or null if unclear.
+          - "included": The item amounts already include consumption tax. Typical indicators on Japanese receipts: "税込", "内税", "(税込)", the item price equals a line labeled 税込小計/合計, or the receipt only prints one price per item and 消費税 is shown as a separate summary line without another 税抜 subtotal.
+          - "excluded": The item amounts are before tax. Typical indicators: "税抜", "外税", "(税抜)", "*" mark that legend explains as 税抜, or the receipt prints 税抜小計 + 消費税 = 合計 with the per-item prices matching 税抜小計.
+          - "mixed": Some items are printed 税込 and others 税抜 (very rare; only when both markers appear next to different items).
+          - null: Cannot determine.
+
         Example format:
         {
           "store": "マツモトキヨシ",
           "store_category_hint": "drugstore",
+          "tax_included": "included",
           "date": "2024-05-20",
           "items": [
             { "description": "ティッシュ", "amount": 300, "category_hint": "daily_goods" },
@@ -160,7 +167,7 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
         }
 
         Ignore total amounts, taxes, or change for the items list. Just list the line items and discounts.
-        If the image is not a receipt or unreadable, return {"items": [], "date": null, "store": null, "store_category_hint": null}.
+        If the image is not a receipt or unreadable, return {"items": [], "date": null, "store": null, "store_category_hint": null, "tax_included": null}.
         `;
 
         // Determine model to use
