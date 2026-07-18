@@ -62,17 +62,69 @@ test.describe('家計簿アプリ - トランザクション入力', () => {
     await cleanupTransactions(page, marker);
   });
 
-  test('必須フィールドのバリデーション', async ({ page }) => {
+  test('必須フィールドのバリデーション (内訳なし時は費目必須)', async ({ page }) => {
     const form = page.locator('form').first();
 
     // 金額のみ入力して登録を試行
     await form.locator('input[type="number"]').first().fill('1000');
     await page.getByRole('button', { name: '登録する (一括)' }).click();
-    
-    // フォームが送信されないことを確認（費目が未選択のため）
-    // ブラウザの標準バリデーションが働く
+
+    // 内訳なしでは費目 select が required
     const categorySelect = form.locator('select').nth(1);
     await expect(categorySelect).toHaveAttribute('required');
+  });
+
+  test('内訳ありなら親費目を選ばなくても登録でき、最大金額の費目が自動採用される', async ({ page }) => {
+    const marker = `E2E自動費目-${Date.now()}`;
+    const form = page.locator('form').first();
+
+    await cleanupTransactions(page, marker);
+
+    // 内訳モーダルを開く
+    await form.getByRole('button', { name: /内訳/ }).click();
+
+    // Splitter モーダルは h3 が「レシート内訳計算」
+    const splitterHeading = page.getByRole('heading', { name: 'レシート内訳計算' });
+    await expect(splitterHeading).toBeVisible();
+    const splitter = splitterHeading.locator('..');
+
+    // 開いた時点で 1 行あるので、もう 1 行追加
+    await splitter.getByRole('button', { name: '+ 行を追加' }).click();
+
+    const rows = splitter.locator('tbody tr');
+    // 1行目: 食費 100, 300円 税込, 品名 marker-食
+    await rows.nth(0).locator('select').first().selectOption('100');
+    await rows.nth(0).locator('select').nth(1).selectOption('INCLUDED');
+    await rows.nth(0).locator('input[type="text"]').fill(`${marker}-食`);
+    await rows.nth(0).locator('input[type="number"]').fill('300');
+    // 2行目: 日用品 200, 800円 税込, 品名 marker-日用品
+    await rows.nth(1).locator('select').first().selectOption('200');
+    await rows.nth(1).locator('select').nth(1).selectOption('INCLUDED');
+    await rows.nth(1).locator('input[type="text"]').fill(`${marker}-日用品`);
+    await rows.nth(1).locator('input[type="number"]').fill('800');
+
+    // 支払合計を明細合計(1100)に一致させ、メイン金額=0 にする
+    await splitter.locator('input[type="number"]').first().fill('1100');
+
+    // 内訳確定
+    await splitter.getByRole('button', { name: '決定して反映' }).click();
+
+    // メモに marker (Splitter クローズ後に入れる)
+    await form.getByRole('textbox', { name: 'メモ' }).fill(marker);
+
+    // 親費目 select は required でないこと、値も空のままであること
+    const categorySelect = form.locator('select').nth(1);
+    await expect(categorySelect).not.toHaveAttribute('required');
+    await expect(categorySelect).toHaveValue('');
+
+    // そのまま登録
+    await page.getByRole('button', { name: '登録する (一括)' }).click();
+
+    // 内訳2件が登録され、両方一覧に出る
+    await expect(page.locator('tbody tr').filter({ hasText: `${marker}-食` })).toBeVisible();
+    await expect(page.locator('tbody tr').filter({ hasText: `${marker}-日用品` })).toBeVisible();
+
+    await cleanupTransactions(page, marker);
   });
 
   test('履歴からのコピー機能', async ({ page }) => {
