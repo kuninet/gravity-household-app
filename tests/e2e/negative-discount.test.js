@@ -87,6 +87,9 @@ test.describe('割引のマイナス金額', () => {
         body: JSON.stringify({
           store: marker,
           date: new Date().toISOString().slice(0, 10),
+          // LLM says amounts are 税抜; #26 wires this to the post-analysis toggle
+          // so the pre-analysis radio no longer needs to be clicked here.
+          tax_included: 'excluded',
           items: [
             { description: itemDescription, amount: 1000 },
             { description: discountDescription, amount: -100 }
@@ -105,13 +108,15 @@ test.describe('割引のマイナス金額', () => {
     await page.getByRole('button', { name: /レシート読取/ }).click();
 
     const modal = page.locator('div.fixed').filter({ hasText: 'レシート自動解析' });
-    await modal.locator('input[type="radio"][value="EXCLUDED"]').check();
     await modal.locator('input[type="file"]').setInputFiles({
       name: 'receipt.png',
       mimeType: 'image/png',
       buffer: Buffer.from('fake receipt image')
     });
     await modal.getByRole('button', { name: '解析開始' }).click();
+
+    // Post-analysis toggle should reflect LLM judgement
+    await expect(modal.locator('input[type="radio"][value="EXCLUDED"]')).toBeChecked();
 
     await expect(modal.locator('tbody tr').nth(0).locator('input[type="text"]')).toHaveValue(itemDescription);
     await expect(modal.locator('tbody tr').nth(1).locator('input[type="text"]')).toHaveValue(discountDescription);
