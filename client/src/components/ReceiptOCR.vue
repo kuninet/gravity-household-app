@@ -95,6 +95,41 @@ const isDragging = ref(false)
 
 const isNegativeAmount = (amount) => Number(amount) < 0
 
+// Category code fallback used when no store/item hint matches.
+const DEFAULT_CATEGORY_CODE = 100 // 食費
+
+// Map an item-level hint returned by Gemini to a category code.
+const CATEGORY_CODE_BY_ITEM_HINT = {
+    food: 100,          // 食費
+    dining_out: 103,    // 外食費
+    alcohol: 105,       // 酒
+    daily_goods: 200,   // 日用品・雑費
+    medical: 500,       // 医療費
+    transport: 300,     // 交通費
+    entertainment: 400, // 交際費・娯楽
+    other: 900          // その他
+}
+
+// Map a store-level hint to the code used when an item has no explicit hint.
+// Drugstores tend to sell mostly daily goods, so the fallback is 日用品 there.
+const FALLBACK_CATEGORY_CODE_BY_STORE_HINT = {
+    drugstore: 200,   // 日用品
+    pharmacy: 200,    // 日用品 (a pharmacy in Japan mixes medicine and daily goods)
+    grocery: 100,     // 食費
+    convenience: 100, // 食費
+    restaurant: 103   // 外食
+}
+
+const resolveCategoryCode = (itemHint, storeHint) => {
+    if (itemHint && CATEGORY_CODE_BY_ITEM_HINT[itemHint] !== undefined) {
+        return CATEGORY_CODE_BY_ITEM_HINT[itemHint]
+    }
+    if (storeHint && FALLBACK_CATEGORY_CODE_BY_STORE_HINT[storeHint] !== undefined) {
+        return FALLBACK_CATEGORY_CODE_BY_STORE_HINT[storeHint]
+    }
+    return DEFAULT_CATEGORY_CODE
+}
+
 const onFileChange = (e) => {
     selectedFile.value = e.target.files[0]
 }
@@ -144,35 +179,35 @@ const analyze = async () => {
         if (!res.ok) throw new Error('Analysis failed')
         const data = await res.json()
         
-        // Extract date and store
+        // Extract date, store, and store category hint
         detectedDate.value = data.date || ''
         detectedStore.value = data.store || ''
+        const storeHint = data.store_category_hint || null
 
         // Map to internal format
         if (data.items) {
             items.value = data.items.map(item => {
                 const amount = Number(item.amount)
-                // Smart Tax Logic
-                // Default category 100 (Food)
-                const categoryCode = 100;
+                // Smart category default: item-level hint > store-level hint > 食費 (issue #20)
+                const categoryCode = resolveCategoryCode(item.category_hint, storeHint)
                 let finalTaxType = 'INCLUDED';
 
                 if (isNegativeAmount(amount)) {
                     finalTaxType = 'INCLUDED';
                 } else if (taxMode.value === 'EXCLUDED') {
-                    // If Food (100-199), use 8%, otherwise 10%
-                    if (categoryCode >= 100 && categoryCode < 200) {
+                    // Food (100-199) except Alcohol (105) is 8%; others 10%.
+                    if (categoryCode >= 100 && categoryCode < 200 && categoryCode !== 105) {
                         finalTaxType = 'EXCLUDED_8';
                     } else {
                         finalTaxType = 'EXCLUDED_10';
                     }
                 }
-                
+
                 return {
                     id: nextId++,
                     description: item.description,
                     amount: Number.isFinite(amount) ? amount : item.amount,
-                    category_code: categoryCode, 
+                    category_code: categoryCode,
                     taxType: finalTaxType
                 }
             })
