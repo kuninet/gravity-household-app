@@ -7,10 +7,11 @@ import TransactionList from './components/TransactionList.vue'
 import CategoryChart from './components/CategoryChart.vue'
 import ComparisonTable from './components/ComparisonTable.vue'
 import YearlyAnalysis from './components/YearlyAnalysis.vue'
+import MultiYearAnalysis from './components/MultiYearAnalysis.vue'
 import FixedCostManager from './components/FixedCostManager.vue'
 import ExcelImport from './components/ExcelImport.vue'
 
-const currentView = ref('dashboard') // 'dashboard' | 'analysis' | 'fixed_costs' | 'import'
+const currentView = ref('dashboard') // 'dashboard' | 'analysis' | 'multi_year_analysis' | 'fixed_costs' | 'import'
 const transactions = ref([])
 const categories = ref([])
 const summary = ref({ total: { income: 0, expense: 0, balance: 0 }, by_category: [], comparison: [] })
@@ -109,6 +110,12 @@ const changeMonth = (offset) => {
                         年次分析
                     </button>
                     <button 
+                        @click="currentView = 'multi_year_analysis'"
+                        class="px-4 py-2 rounded-md transition font-bold"
+                        :class="currentView === 'multi_year_analysis' ? 'bg-white text-blue-700 shadow' : 'text-blue-100 hover:bg-blue-600'">
+                        複数年比較
+                    </button>
+                    <button 
                         @click="currentView = 'fixed_costs'"
                         class="px-4 py-2 rounded-md transition font-bold"
                         :class="currentView === 'fixed_costs' ? 'bg-white text-blue-700 shadow' : 'text-blue-100 hover:bg-blue-600'">
@@ -186,6 +193,11 @@ const changeMonth = (offset) => {
         <!-- Analysis View -->
         <div v-else-if="currentView === 'analysis'">
             <YearlyAnalysis />
+        </div>
+
+        <!-- Multi Year Analysis View -->
+        <div v-else-if="currentView === 'multi_year_analysis'">
+            <MultiYearAnalysis />
         </div>
 
         <!-- Fixed Costs View -->
