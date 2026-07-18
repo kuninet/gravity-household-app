@@ -214,7 +214,63 @@ const applySplitter = (result) => {
 }
 
 // OCR
+const droppedFile = ref(null)
+const isDraggingReceipt = ref(false)
+let dragDepth = 0
+
 const openOCR = () => {
+    droppedFile.value = null
+    showOCR.value = true
+}
+
+// Only treat drags that carry files as receipt drops. Ignore text/element drags
+// so links within the form (e.g. "履歴からコピー" li elements) do not trigger it.
+const dragHasFiles = (e) => {
+    const types = e.dataTransfer && e.dataTransfer.types
+    if (!types) return false
+    return Array.from(types).includes('Files')
+}
+
+const onFormDragEnter = (e) => {
+    if (!dragHasFiles(e)) return
+    dragDepth++
+    isDraggingReceipt.value = true
+}
+
+const onFormDragOver = (e) => {
+    if (!dragHasFiles(e)) return
+    e.preventDefault()
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+}
+
+const onFormDragLeave = (e) => {
+    if (!dragHasFiles(e)) return
+    dragDepth = Math.max(0, dragDepth - 1)
+    if (dragDepth === 0) isDraggingReceipt.value = false
+}
+
+// Accept anything that either has an image/pdf MIME or a matching extension.
+// macOS Finder / iOS Photos sometimes leave file.type empty for PDFs and HEIC,
+// so the extension is a necessary fallback.
+const isReceiptFile = (file) => {
+    if (!file) return false
+    const mime = (file.type || '').toLowerCase()
+    if (mime.startsWith('image/') || mime === 'application/pdf') return true
+    return /\.(pdf|jpe?g|png|webp|heic|heif|gif)$/i.test(file.name || '')
+}
+
+const onFormDrop = (e) => {
+    dragDepth = 0
+    isDraggingReceipt.value = false
+    if (!dragHasFiles(e)) return
+    e.preventDefault()
+    const file = e.dataTransfer.files && e.dataTransfer.files[0]
+    if (!file) return
+    if (!isReceiptFile(file)) {
+        alert('レシートに使えるファイル形式ではありません (画像 / PDF のみ対応)')
+        return
+    }
+    droppedFile.value = file
     showOCR.value = true
 }
 
@@ -243,7 +299,25 @@ const applyOCR = (result) => {
 </script>
 
 <template>
-  <div class="bg-white p-4 rounded shadow mb-6">
+  <div
+    class="bg-white p-4 rounded shadow mb-6 relative"
+    @dragenter="onFormDragEnter"
+    @dragover="onFormDragOver"
+    @dragleave="onFormDragLeave"
+    @drop="onFormDrop"
+  >
+    <!-- Drop overlay: shown while user drags a file over the form (issue #19) -->
+    <div
+      v-if="isDraggingReceipt"
+      class="absolute inset-0 z-40 flex items-center justify-center rounded border-4 border-dashed border-green-500 bg-green-50 bg-opacity-90 pointer-events-none"
+    >
+        <div class="text-center">
+            <div class="text-5xl mb-2">📥</div>
+            <div class="font-bold text-green-700 text-lg">ここにレシート (PDF / 画像) をドロップ</div>
+            <div class="text-green-600 text-sm mt-1">AI 解析モーダルが開きます</div>
+        </div>
+    </div>
+
     <div class="flex justify-between items-center mb-4">
         <h2 class="text-xl font-bold">新規入力</h2>
         <button type="button" @click="openOCR" class="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1 rounded text-sm font-bold flex items-center">
@@ -347,10 +421,11 @@ const applyOCR = (result) => {
     />
 
     <!-- OCR Modal -->
-    <ReceiptOCR 
-        :show="showOCR" 
+    <ReceiptOCR
+        :show="showOCR"
         :categories="categories || []"
-        @close="showOCR = false"
+        :initial-file="droppedFile"
+        @close="showOCR = false; droppedFile = null"
         @apply="applyOCR"
     />
   </div>
