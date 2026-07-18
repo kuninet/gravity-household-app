@@ -83,14 +83,63 @@ const calculateTaxIncludedAmount = (item) => {
     return amt
 }
 
+// Pick the category with the largest signed tax-included total among splitter items.
+// Signed sum handles discount lines (negative amounts) correctly: a discount reduces
+// the actual burden on that category rather than boosting it via absolute value.
+const inferCategoryFromItems = (items) => {
+    const totals = new Map()
+    for (const item of items) {
+        if (!item.category_code) continue
+        const amt = calculateTaxIncludedAmount(item)
+        if (amt === null) continue
+        totals.set(item.category_code, (totals.get(item.category_code) || 0) + Number(amt))
+    }
+    let bestCode = ''
+    let bestAmt = -Infinity
+    for (const [code, amt] of totals) {
+        if (amt > bestAmt) { bestAmt = amt; bestCode = code }
+    }
+    return bestCode
+}
+
+// Category code → transaction type (mirrors the watch on form.value.category_code).
+// Used synchronously during submit to avoid a reactivity race when auto-filling.
+const typeForCategory = (code) => {
+    const n = Number(code)
+    return (n >= 700 && n < 800) ? 'INCOME' : 'EXPENSE'
+}
+
 // Submit
 const submit = async () => {
   if (isSubmitting.value) return
   isSubmitting.value = true
   try {
-    // 1. Submit main transaction (calculated amount)
+    // Auto-fill main category from splitter items when omitted (issue #18)
+    let categoryAutoFilled = false
+    if (!form.value.category_code && splitterState.value.items.length > 0) {
+        const inferred = inferCategoryFromItems(splitterState.value.items)
+        if (inferred) {
+            form.value.category_code = inferred
+            // Set type synchronously; the reactive watch on category_code runs
+            // async and would not update form.value.type before the POST below.
+            form.value.type = typeForCategory(inferred)
+            categoryAutoFilled = true
+        }
+    }
+
+    // Guard against silent no-op: nothing to submit means user typed nothing
+    // meaningful. Warn instead of resetting the form as if it succeeded.
     const mainAmount = toValidMainAmount(form.value.amount)
-    if (mainAmount !== null) {
+    const hasValidItem = splitterState.value.items.some(
+        (item) => item.category_code && calculateTaxIncludedAmount(item) !== null
+    )
+    if (mainAmount === null && !hasValidItem) {
+        alert('登録できる内容がありません。金額または内訳を入力してください。')
+        return
+    }
+
+    // 1. Submit main transaction (calculated amount)
+    if (mainAmount !== null && form.value.category_code) {
         await createTransaction({
             ...form.value,
             amount: mainAmount
@@ -127,7 +176,8 @@ const submit = async () => {
     form.value.amount = ''
     form.value.description = ''
     form.value.memo = ''
-    
+    if (categoryAutoFilled) form.value.category_code = ''
+
     // Reset Splitter State
     splitterState.value = { total: '', items: [] }
 
@@ -219,9 +269,15 @@ const applyOCR = (result) => {
             </div>
 
             <div>
-                <label class="block text-sm font-bold">費目 (メイン: 食費など)</label>
-                <select v-model="form.category_code" class="border p-2 w-full rounded" required :disabled="isLoading">
-                    <option value="" disabled>{{ isLoading ? '読み込み中...' : '選択してください' }}</option>
+                <label class="block text-sm font-bold">
+                    費目
+                    <span v-if="splitterState.items.length > 0" class="text-xs font-normal text-gray-500">(内訳ありのため自動判定)</span>
+                    <span v-else class="text-xs font-normal text-gray-500">(メイン: 食費など)</span>
+                </label>
+                <select v-model="form.category_code" class="border p-2 w-full rounded" :required="splitterState.items.length === 0" :disabled="isLoading">
+                    <option value="" :disabled="splitterState.items.length === 0">
+                        {{ isLoading ? '読み込み中...' : (splitterState.items.length > 0 ? '(内訳の最大金額から自動)' : '選択してください') }}
+                    </option>
                     <option v-for="cat in (categories || []).filter(c => c.code < 600 || (c.code >= 700 && c.code < 900) || (c.code >= 900 && c.code !== 901))" :key="cat.code" :value="cat.code">
                         {{ cat.code }}: {{ cat.name }} ({{ cat.group_name }})
                     </option>
