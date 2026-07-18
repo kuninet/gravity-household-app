@@ -66,9 +66,15 @@ function buildMonthlyIndex(rows, keyField) {
 
 // Project the current fiscal year's annual total by adding, for each unelapsed month,
 // the average of that month across past years. Returns null when there is no past-year data.
-function projectAnnual(actualCurrentYearTotal, monthlyByYear, currentFiscalYearNum, elapsedMonths) {
+function projectAnnual(monthlyByYear, currentFiscalYearNum, elapsedMonths) {
     const pastYears = Object.keys(monthlyByYear).filter(y => parseInt(y, 10) < currentFiscalYearNum);
     if (pastYears.length === 0) return null;
+
+    const currentYearMonthly = monthlyByYear[String(currentFiscalYearNum)] || new Array(12).fill(0);
+    let elapsedActual = 0;
+    for (let m = 0; m < elapsedMonths; m++) {
+        elapsedActual += currentYearMonthly[m] || 0;
+    }
 
     let projectedRemainder = 0;
     for (let m = elapsedMonths; m < 12; m++) {
@@ -79,7 +85,7 @@ function projectAnnual(actualCurrentYearTotal, monthlyByYear, currentFiscalYearN
         const avg = values.reduce((a, b) => a + b, 0) / values.length;
         projectedRemainder += avg;
     }
-    return actualCurrentYearTotal + Math.round(projectedRemainder);
+    return elapsedActual + Math.round(projectedRemainder);
 }
 
 // Get yearly analysis
@@ -320,7 +326,6 @@ router.get('/multi_year', async (req, res) => {
             if (currentYearIndex !== -1) {
                 const monthlyByYear = groupMonthlyIndex[g.name] || {};
                 projected[currentYearIndex] = projectAnnual(
-                    g.data[currentYearIndex],
                     monthlyByYear,
                     currentFiscalYearNum,
                     elapsedMonths
@@ -334,7 +339,6 @@ router.get('/multi_year', async (req, res) => {
             if (currentYearIndex !== -1) {
                 const monthlyByYear = categoryMonthlyIndex[c.name] || {};
                 projected[currentYearIndex] = projectAnnual(
-                    c.data[currentYearIndex],
                     monthlyByYear,
                     currentFiscalYearNum,
                     elapsedMonths
@@ -352,13 +356,11 @@ router.get('/multi_year', async (req, res) => {
             const expenseMonthlyByYear = typeMonthlyIndex['EXPENSE'] || {};
 
             income_projected[currentYearIndex] = projectAnnual(
-                income[currentYearIndex],
                 incomeMonthlyByYear,
                 currentFiscalYearNum,
                 elapsedMonths
             );
             expense_projected[currentYearIndex] = projectAnnual(
-                expense[currentYearIndex],
                 expenseMonthlyByYear,
                 currentFiscalYearNum,
                 elapsedMonths
