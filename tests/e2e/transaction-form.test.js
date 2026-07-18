@@ -127,6 +127,38 @@ test.describe('家計簿アプリ - トランザクション入力', () => {
     await cleanupTransactions(page, marker);
   });
 
+  test('PDF をフォームにドロップするとレシートOCRモーダルが開きファイルが選択される', async ({ page }) => {
+    // OCR モデル取得を止め、外部依存を作らない
+    await page.route('**/api/ocr/models', async (route) => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ models: [{ id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' }] }) });
+    });
+
+    const formCard = page.getByRole('heading', { name: '新規入力' }).locator('..');
+
+    // DataTransfer に PDF File を積んで dragenter → drop
+    const dataTransfer = await page.evaluateHandle(() => {
+        const dt = new DataTransfer();
+        const file = new File(['%PDF-1.4 dummy'], 'e2e-dropzone-receipt.pdf', { type: 'application/pdf' });
+        dt.items.add(file);
+        return dt;
+    });
+
+    await formCard.dispatchEvent('dragenter', { dataTransfer });
+    await expect(page.locator('text=ここにレシート')).toBeVisible();
+
+    await formCard.dispatchEvent('drop', { dataTransfer });
+
+    // OCR モーダルが開く
+    await expect(page.getByRole('heading', { name: 'レシート自動解析 (AI)' })).toBeVisible();
+    // ドロップしたファイル名が表示される
+    await expect(page.locator('text=e2e-dropzone-receipt.pdf')).toBeVisible();
+    // 「解析開始」ボタンが有効化される
+    await expect(page.getByRole('button', { name: '解析開始' })).toBeVisible();
+
+    // 後片付け: モーダルを閉じる (フッターのキャンセル)
+    await page.getByRole('button', { name: 'キャンセル' }).last().click();
+  });
+
   test('履歴からのコピー機能', async ({ page }) => {
     const marker = `E2E履歴コピー-${Date.now()}`;
     const description = `${marker}-履歴商品`;
