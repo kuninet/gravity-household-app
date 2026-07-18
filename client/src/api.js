@@ -79,6 +79,12 @@ export async function fetchYearlyAnalysis(year) {
     return res.json();
 }
 
+export async function fetchMultiYearAnalysis(from, to) {
+    const res = await fetch(`${API_BASE}/analysis/multi_year?from=${from}&to=${to}`);
+    if (!res.ok) throw new Error('Failed to fetch multi-year analysis');
+    return res.json();
+}
+
 export async function fetchFixedCostMatrix(year) {
     const res = await fetch(`${API_BASE}/fixed_costs/matrix?year=${year}`);
     if (!res.ok) throw new Error('Failed to fetch fixed cost matrix');
