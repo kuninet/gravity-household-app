@@ -1,42 +1,41 @@
 @echo off
-rem 家計簿Gravity の Windows サービスを停止・削除する。
-chcp 65001 >nul
+rem Stop and remove the Household Gravity Windows service.
 setlocal
 
 set SERVICE_NAME=HouseholdGravity
 
 net session >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo [ERROR] 管理者権限で実行してください。
+if errorlevel 1 (
+    echo [ERROR] Please run as Administrator.
     pause
     exit /b 1
 )
 
 where nssm >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo [ERROR] NSSM が見つかりません。https://nssm.cc/ からダウンロードし PATH を通してください。
+if errorlevel 1 (
+    echo [ERROR] nssm not found on PATH. Download from https://nssm.cc/ and add to PATH.
     pause
     exit /b 1
 )
 
 sc query %SERVICE_NAME% >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo [INFO] サービス %SERVICE_NAME% は登録されていません。
+if errorlevel 1 (
+    echo [INFO] Service %SERVICE_NAME% is not installed.
     pause
     exit /b 0
 )
 
-echo [INFO] サービス %SERVICE_NAME% を停止します。
+echo [INFO] Stopping service %SERVICE_NAME% ...
 nssm stop %SERVICE_NAME%
 
-echo [INFO] サービス %SERVICE_NAME% を削除します。
+echo [INFO] Removing service %SERVICE_NAME% ...
 nssm remove %SERVICE_NAME% confirm
-if %ERRORLEVEL% neq 0 (
-    echo [ERROR] サービス削除に失敗しました。
+if errorlevel 1 (
+    echo [ERROR] Failed to remove service.
     pause
     exit /b 1
 )
 
-echo [OK] サービス %SERVICE_NAME% を削除しました。
+echo [OK] Service %SERVICE_NAME% removed.
 endlocal
 pause
