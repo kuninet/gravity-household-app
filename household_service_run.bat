@@ -1,7 +1,5 @@
 @echo off
-rem NSSM から起動される実体スクリプト。
-rem `npm run dev` をフォアグラウンドで実行し、
-rem NSSM がプロセス生存を追跡できるようにする。
-chcp 65001 >nul
+rem Entry point invoked by NSSM.
+rem Run "npm run dev" in the foreground so NSSM can track the process.
 cd /d "%~dp0"
 call npm run dev
