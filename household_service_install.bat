@@ -1,32 +1,31 @@
 @echo off
-rem 家計簿Gravity を Windows サービスとして登録する。
-rem 事前に NSSM (https://nssm.cc/) をダウンロードし PATH に通しておくこと。
-chcp 65001 >nul
+rem Install Household Gravity as a Windows service via NSSM.
+rem Requires NSSM (https://nssm.cc/) on PATH and Administrator privileges.
 setlocal
 
 set SERVICE_NAME=HouseholdGravity
-set DISPLAY_NAME=家計簿Gravity
-set DESCRIPTION=家計簿アプリ Gravity (client + server) を npm run dev で常駐起動
+set DISPLAY_NAME=Household Gravity
+set DESCRIPTION=Household accounting app Gravity (client + server) running via npm run dev
 set SCRIPT_DIR=%~dp0
 set RUN_BAT=%SCRIPT_DIR%household_service_run.bat
 set LOG_DIR=%SCRIPT_DIR%logs
 
 net session >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo [ERROR] 管理者権限で実行してください。
+if errorlevel 1 (
+    echo [ERROR] Please run as Administrator.
     pause
     exit /b 1
 )
 
 where nssm >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo [ERROR] NSSM が見つかりません。https://nssm.cc/ からダウンロードし PATH を通してください。
+if errorlevel 1 (
+    echo [ERROR] nssm not found on PATH. Download from https://nssm.cc/ and add to PATH.
     pause
     exit /b 1
 )
 
 if not exist "%RUN_BAT%" (
-    echo [ERROR] %RUN_BAT% が存在しません。
+    echo [ERROR] %RUN_BAT% not found.
     pause
     exit /b 1
 )
@@ -34,16 +33,16 @@ if not exist "%RUN_BAT%" (
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 
 sc query %SERVICE_NAME% >nul 2>&1
-if %ERRORLEVEL% equ 0 (
-    echo [INFO] サービス %SERVICE_NAME% は既に存在します。先に household_service_uninstall.bat で削除してください。
+if not errorlevel 1 (
+    echo [INFO] Service %SERVICE_NAME% already exists. Run household_service_uninstall.bat first.
     pause
     exit /b 1
 )
 
-echo [INFO] サービス %SERVICE_NAME% を登録します。
+echo [INFO] Installing service %SERVICE_NAME% ...
 nssm install %SERVICE_NAME% "%RUN_BAT%"
-if %ERRORLEVEL% neq 0 (
-    echo [ERROR] nssm install に失敗しました。
+if errorlevel 1 (
+    echo [ERROR] nssm install failed.
     pause
     exit /b 1
 )
@@ -62,15 +61,15 @@ nssm set %SERVICE_NAME% AppStopMethodConsole 5000
 nssm set %SERVICE_NAME% AppStopMethodWindow 5000
 nssm set %SERVICE_NAME% AppStopMethodThreads 5000
 
-echo [INFO] サービス %SERVICE_NAME% を開始します。
+echo [INFO] Starting service %SERVICE_NAME% ...
 nssm start %SERVICE_NAME%
-if %ERRORLEVEL% neq 0 (
-    echo [WARN] サービス開始に失敗しました。イベントログと %LOG_DIR% を確認してください。
+if errorlevel 1 (
+    echo [WARN] Failed to start service. Check Event Viewer and %LOG_DIR%.
     pause
     exit /b 1
 )
 
-echo [OK] サービス %SERVICE_NAME% を登録・開始しました。
-echo      ログ: %LOG_DIR%
+echo [OK] Service %SERVICE_NAME% installed and started.
+echo      Log dir: %LOG_DIR%
 endlocal
 pause
