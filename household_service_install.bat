@@ -7,6 +7,10 @@ set SERVICE_NAME=HouseholdGravity
 set DISPLAY_NAME=Household Gravity
 set DESCRIPTION=Household accounting app Gravity (client + server) running via npm run dev
 set SCRIPT_DIR=%~dp0
+rem Strip trailing backslash for values passed to NSSM. A trailing "\"
+rem before the closing quote (e.g. "C:\path\") is parsed as an escaped
+rem quote and corrupts AppDirectory.
+set APP_DIR=%SCRIPT_DIR:~0,-1%
 set RUN_BAT=%SCRIPT_DIR%household_service_run.bat
 set LOG_DIR=%SCRIPT_DIR%logs
 
@@ -47,7 +51,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-nssm set %SERVICE_NAME% AppDirectory "%SCRIPT_DIR%"
+nssm set %SERVICE_NAME% AppDirectory "%APP_DIR%"
 nssm set %SERVICE_NAME% DisplayName "%DISPLAY_NAME%"
 nssm set %SERVICE_NAME% Description "%DESCRIPTION%"
 nssm set %SERVICE_NAME% Start SERVICE_AUTO_START
