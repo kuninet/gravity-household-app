@@ -58,12 +58,31 @@ watch(year, loadData)
 // Handling Input
 const saving = ref(false)
 
+// 表示用フォーマッタ: 0/空/未定義は空文字にして「0 は表示しない」現行仕様を維持する
+const formatAmount = (v) => {
+    if (v === undefined || v === null || v === '' || v === 0) return ''
+    const n = Number(v)
+    if (Number.isNaN(n)) return ''
+    return n.toLocaleString('ja-JP')
+}
+
+// フォーカス時はカンマを外して素の数字を編集させる
+const onFocus = (month, code, event) => {
+    const v = matrix.value[month]?.[code]
+    event.target.value = v ? String(v) : ''
+}
+
 const onBlur = async (month, code, type, event) => {
-    const val = event.target.value
+    // 表示は "12,345" のようにカンマ入りで戻る可能性があるので、保存前に必ずカンマを除去
+    const raw = String(event.target.value).replace(/,/g, '').trim()
     const currentVal = matrix.value[month][code]
 
     // If value changed (comparing with string linkage)
-    if (String(currentVal || '') === String(val)) return
+    if (String(currentVal || '') === String(raw)) {
+        // 未変更でも表示はフォーマット済みに戻す (focus 時に生数字へ書き換えているため)
+        event.target.value = formatAmount(currentVal)
+        return
+    }
 
     saving.value = true
     try {
@@ -71,11 +90,13 @@ const onBlur = async (month, code, type, event) => {
             year: year.value,
             month: Number(month),
             category_code: code,
-            amount: val,
+            amount: raw,
             type,
         })
         // Update local state
-        matrix.value[month][code] = val ? Number(val) : 0
+        const newVal = raw ? Number(raw) : 0
+        matrix.value[month][code] = newVal
+        event.target.value = formatAmount(newVal)
     } catch(e) {
         alert('保存に失敗しました')
         console.error(e)
@@ -201,98 +222,109 @@ const summary = computed(() => {
         </div>
     </div>
 
-    <!-- 収入セクション -->
-    <h3 class="text-lg font-bold text-gray-700 mb-2">収入</h3>
-    <div class="bg-white rounded shadow overflow-x-auto mb-6">
-        <table class="w-full text-sm border-collapse">
-            <thead class="bg-gray-100 text-gray-600">
-                <tr>
-                    <th class="p-2 border bg-gray-100 sticky left-0 z-10 w-20">月</th>
-                    <th v-for="cat in incomeCategories" :key="cat.code" class="p-2 border min-w-[120px] font-bold">
-                        {{ cat.name }}
-                    </th>
-                    <th class="p-2 border bg-green-50 font-bold min-w-[120px]">収入計</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr v-for="m in months" :key="m" class="hover:bg-gray-50">
-                    <td class="p-2 border font-bold text-center sticky left-0 bg-gray-50 z-10">{{ Number(m) }}月</td>
-                    <td v-for="cat in incomeCategories" :key="cat.code" class="p-0 border relative group">
-                        <input
-                            type="number"
-                            :value="matrix[m]?.[cat.code]"
-                            @blur="onBlur(m, cat.code, 'INCOME', $event)"
-                            @paste="handlePaste(m, cat.code, 'INCOME', incomeCategories, $event)"
-                            @keydown.enter="$event.target.blur()"
-                            placeholder="-"
-                            class="w-full h-full p-2 text-right focus:bg-blue-50 focus:outline-none bg-transparent transition"
-                        />
-                        <div class="hidden group-hover:block absolute -top-8 left-0 bg-black text-white text-xs p-1 rounded whitespace-nowrap z-20">
-                            {{ Number(m) }}月 - {{ cat.name }}
-                        </div>
-                    </td>
-                    <td class="p-2 border text-right font-mono font-bold bg-green-50 text-gray-700">
-                        ¥{{ summary.income[Number(m) - 1].toLocaleString() }}
-                    </td>
-                </tr>
-                <tr class="bg-green-100 font-bold border-t-2 border-green-200">
-                    <td class="p-2 border text-center sticky left-0 bg-green-100 z-10">年計</td>
-                    <td v-for="cat in incomeCategories" :key="cat.code" class="p-2 border text-right font-mono">
-                        ¥{{ getCategoryTotal(cat.code).toLocaleString() }}
-                    </td>
-                    <td class="p-2 border text-right font-mono text-green-900">
-                        ¥{{ summary.incomeYear.toLocaleString() }}
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
+    <!-- 収入 / 支出セクションを横並び (狭い画面では縦積みに戻す) -->
+    <div class="flex flex-col md:flex-row gap-4 mb-6">
+        <!-- 収入セクション: 列数が少ないので幅は内容に任せる -->
+        <div class="md:flex-shrink-0">
+            <h3 class="text-lg font-bold text-gray-700 mb-2">収入</h3>
+            <div class="bg-white rounded shadow overflow-x-auto">
+                <table class="text-sm border-collapse">
+                    <thead class="bg-gray-100 text-gray-600">
+                        <tr>
+                            <th class="p-2 border bg-gray-100 sticky left-0 z-10 w-20">月</th>
+                            <th v-for="cat in incomeCategories" :key="cat.code" class="p-2 border min-w-[120px] font-bold">
+                                {{ cat.name }}
+                            </th>
+                            <th class="p-2 border bg-green-50 font-bold min-w-[120px]">収入計</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="m in months" :key="m" class="hover:bg-gray-50">
+                            <td class="p-2 border font-bold text-center sticky left-0 bg-gray-50 z-10">{{ Number(m) }}月</td>
+                            <td v-for="cat in incomeCategories" :key="cat.code" class="p-0 border relative group">
+                                <input
+                                    type="text"
+                                    inputmode="numeric"
+                                    :value="formatAmount(matrix[m]?.[cat.code])"
+                                    @focus="onFocus(m, cat.code, $event)"
+                                    @blur="onBlur(m, cat.code, 'INCOME', $event)"
+                                    @paste="handlePaste(m, cat.code, 'INCOME', incomeCategories, $event)"
+                                    @keydown.enter="$event.target.blur()"
+                                    placeholder="-"
+                                    class="w-full h-full p-2 text-right focus:bg-blue-50 focus:outline-none bg-transparent transition"
+                                />
+                                <div class="hidden group-hover:block absolute -top-8 left-0 bg-black text-white text-xs p-1 rounded whitespace-nowrap z-20">
+                                    {{ Number(m) }}月 - {{ cat.name }}
+                                </div>
+                            </td>
+                            <td class="p-2 border text-right font-mono font-bold bg-green-50 text-gray-700">
+                                ¥{{ summary.income[Number(m) - 1].toLocaleString() }}
+                            </td>
+                        </tr>
+                        <tr class="bg-green-100 font-bold border-t-2 border-green-200">
+                            <td class="p-2 border text-center sticky left-0 bg-green-100 z-10">年計</td>
+                            <td v-for="cat in incomeCategories" :key="cat.code" class="p-2 border text-right font-mono">
+                                ¥{{ getCategoryTotal(cat.code).toLocaleString() }}
+                            </td>
+                            <td class="p-2 border text-right font-mono text-green-900">
+                                ¥{{ summary.incomeYear.toLocaleString() }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-    <!-- 支出セクション -->
-    <h3 class="text-lg font-bold text-gray-700 mb-2">支出</h3>
-    <div class="bg-white rounded shadow overflow-x-auto">
-        <table class="w-full text-sm border-collapse">
-            <thead class="bg-gray-100 text-gray-600">
-                <tr>
-                    <th class="p-2 border bg-gray-100 sticky left-0 z-10 w-20">月</th>
-                    <th v-for="cat in expenseCategories" :key="cat.code" class="p-2 border min-w-[100px] font-bold">
-                        {{ cat.name }}
-                    </th>
-                    <th class="p-2 border bg-yellow-50 font-bold min-w-[100px]">合計</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr v-for="m in months" :key="m" class="hover:bg-gray-50">
-                    <td class="p-2 border font-bold text-center sticky left-0 bg-gray-50 z-10">{{ Number(m) }}月</td>
-                    <td v-for="cat in expenseCategories" :key="cat.code" class="p-0 border relative group">
-                        <input
-                            type="number"
-                            :value="matrix[m]?.[cat.code]"
-                            @blur="onBlur(m, cat.code, 'EXPENSE', $event)"
-                            @paste="handlePaste(m, cat.code, 'EXPENSE', expenseCategories, $event)"
-                            @keydown.enter="$event.target.blur()"
-                            placeholder="-"
-                            class="w-full h-full p-2 text-right focus:bg-blue-50 focus:outline-none bg-transparent transition"
-                        />
-                        <div class="hidden group-hover:block absolute -top-8 left-0 bg-black text-white text-xs p-1 rounded whitespace-nowrap z-20">
-                            {{ Number(m) }}月 - {{ cat.name }}
-                        </div>
-                    </td>
-                    <td class="p-2 border text-right font-mono font-bold bg-yellow-50 text-gray-700">
-                        ¥{{ summary.expense[Number(m) - 1].toLocaleString() }}
-                    </td>
-                </tr>
-                <tr class="bg-yellow-100 font-bold border-t-2 border-yellow-200">
-                    <td class="p-2 border text-center sticky left-0 bg-yellow-100 z-10">年計</td>
-                    <td v-for="cat in expenseCategories" :key="cat.code" class="p-2 border text-right font-mono">
-                        ¥{{ getCategoryTotal(cat.code).toLocaleString() }}
-                    </td>
-                    <td class="p-2 border text-right font-mono text-blue-900">
-                        ¥{{ summary.expenseYear.toLocaleString() }}
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+        <!-- 支出セクション: 残りの幅を占有し、必要ならこちら側だけ横スクロール -->
+        <div class="flex-1 min-w-0">
+            <h3 class="text-lg font-bold text-gray-700 mb-2">支出</h3>
+            <div class="bg-white rounded shadow overflow-x-auto">
+                <table class="w-full text-sm border-collapse">
+                    <thead class="bg-gray-100 text-gray-600">
+                        <tr>
+                            <th class="p-2 border bg-gray-100 sticky left-0 z-10 w-20">月</th>
+                            <th v-for="cat in expenseCategories" :key="cat.code" class="p-2 border min-w-[100px] font-bold">
+                                {{ cat.name }}
+                            </th>
+                            <th class="p-2 border bg-yellow-50 font-bold min-w-[100px]">合計</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="m in months" :key="m" class="hover:bg-gray-50">
+                            <td class="p-2 border font-bold text-center sticky left-0 bg-gray-50 z-10">{{ Number(m) }}月</td>
+                            <td v-for="cat in expenseCategories" :key="cat.code" class="p-0 border relative group">
+                                <input
+                                    type="text"
+                                    inputmode="numeric"
+                                    :value="formatAmount(matrix[m]?.[cat.code])"
+                                    @focus="onFocus(m, cat.code, $event)"
+                                    @blur="onBlur(m, cat.code, 'EXPENSE', $event)"
+                                    @paste="handlePaste(m, cat.code, 'EXPENSE', expenseCategories, $event)"
+                                    @keydown.enter="$event.target.blur()"
+                                    placeholder="-"
+                                    class="w-full h-full p-2 text-right focus:bg-blue-50 focus:outline-none bg-transparent transition"
+                                />
+                                <div class="hidden group-hover:block absolute -top-8 left-0 bg-black text-white text-xs p-1 rounded whitespace-nowrap z-20">
+                                    {{ Number(m) }}月 - {{ cat.name }}
+                                </div>
+                            </td>
+                            <td class="p-2 border text-right font-mono font-bold bg-yellow-50 text-gray-700">
+                                ¥{{ summary.expense[Number(m) - 1].toLocaleString() }}
+                            </td>
+                        </tr>
+                        <tr class="bg-yellow-100 font-bold border-t-2 border-yellow-200">
+                            <td class="p-2 border text-center sticky left-0 bg-yellow-100 z-10">年計</td>
+                            <td v-for="cat in expenseCategories" :key="cat.code" class="p-2 border text-right font-mono">
+                                ¥{{ getCategoryTotal(cat.code).toLocaleString() }}
+                            </td>
+                            <td class="p-2 border text-right font-mono text-blue-900">
+                                ¥{{ summary.expenseYear.toLocaleString() }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- 集計セクション (収入合計 / 支出合計 / 差引) -->
