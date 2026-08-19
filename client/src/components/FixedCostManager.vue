@@ -147,15 +147,6 @@ const handlePaste = async (startMonth, startCode, type, sectionCategories, event
 }
 
 
-// Calculations
-const sumForCodes = (month, codes) => {
-    const row = matrix.value[month]
-    if (!row) return 0
-    return codes.reduce((sum, code) => sum + (Number(row[code]) || 0), 0)
-}
-
-const getMonthTotal = (month, codes) => sumForCodes(month, codes)
-
 const getCategoryTotal = (code) => {
     let sum = 0
     months.forEach(m => {
@@ -166,22 +157,25 @@ const getCategoryTotal = (code) => {
     return sum
 }
 
-const getSectionGrandTotal = (codes) => {
-    let sum = 0
-    months.forEach(m => {
-        sum += sumForCodes(m, codes)
-    })
-    return sum
-}
-
-// 集計セクション (収入合計/支出合計/差引)。
-// matrix の変更に追従し、月別/年計をまとめて 1 度だけ計算する。
+// 月別 (収入/支出/差引) と年計を 1 周でまとめて算出。テンプレート側は summary.* を参照する。
 const summary = computed(() => {
-    const income = months.map(m => sumForCodes(m, INCOME_FIXED_CODES))
-    const expense = months.map(m => sumForCodes(m, EXPENSE_FIXED_CODES))
-    const net = income.map((v, i) => v - expense[i])
-    const incomeYear = income.reduce((s, v) => s + v, 0)
-    const expenseYear = expense.reduce((s, v) => s + v, 0)
+    const income = new Array(months.length).fill(0)
+    const expense = new Array(months.length).fill(0)
+    const net = new Array(months.length).fill(0)
+    let incomeYear = 0
+    let expenseYear = 0
+
+    months.forEach((m, i) => {
+        const row = matrix.value[m]
+        if (row) {
+            for (const code of INCOME_FIXED_CODES) income[i] += Number(row[code]) || 0
+            for (const code of EXPENSE_FIXED_CODES) expense[i] += Number(row[code]) || 0
+        }
+        net[i] = income[i] - expense[i]
+        incomeYear += income[i]
+        expenseYear += expense[i]
+    })
+
     return {
         income,
         expense,
@@ -238,7 +232,7 @@ const summary = computed(() => {
                         </div>
                     </td>
                     <td class="p-2 border text-right font-mono font-bold bg-green-50 text-gray-700">
-                        ¥{{ getMonthTotal(m, INCOME_FIXED_CODES).toLocaleString() }}
+                        ¥{{ summary.income[Number(m) - 1].toLocaleString() }}
                     </td>
                 </tr>
                 <tr class="bg-green-100 font-bold border-t-2 border-green-200">
@@ -247,7 +241,7 @@ const summary = computed(() => {
                         ¥{{ getCategoryTotal(cat.code).toLocaleString() }}
                     </td>
                     <td class="p-2 border text-right font-mono text-green-900">
-                        ¥{{ getSectionGrandTotal(INCOME_FIXED_CODES).toLocaleString() }}
+                        ¥{{ summary.incomeYear.toLocaleString() }}
                     </td>
                 </tr>
             </tbody>
@@ -285,7 +279,7 @@ const summary = computed(() => {
                         </div>
                     </td>
                     <td class="p-2 border text-right font-mono font-bold bg-yellow-50 text-gray-700">
-                        ¥{{ getMonthTotal(m, EXPENSE_FIXED_CODES).toLocaleString() }}
+                        ¥{{ summary.expense[Number(m) - 1].toLocaleString() }}
                     </td>
                 </tr>
                 <tr class="bg-yellow-100 font-bold border-t-2 border-yellow-200">
@@ -294,7 +288,7 @@ const summary = computed(() => {
                         ¥{{ getCategoryTotal(cat.code).toLocaleString() }}
                     </td>
                     <td class="p-2 border text-right font-mono text-blue-900">
-                        ¥{{ getSectionGrandTotal(EXPENSE_FIXED_CODES).toLocaleString() }}
+                        ¥{{ summary.expenseYear.toLocaleString() }}
                     </td>
                 </tr>
             </tbody>

@@ -5,7 +5,6 @@ const db = require('../db');
 // 固定入力画面で扱うカテゴリ (支出/収入で分離)
 const EXPENSE_FIXED_CODES = [604, 601, 603, 606, 602, 605, 607, 901, 608];
 const INCOME_FIXED_CODES = [700];
-const FIXED_CODES = [...EXPENSE_FIXED_CODES, ...INCOME_FIXED_CODES];
 
 // INSERT 時の date を決定する。
 // EXPENSE: 会計月の 01 日 (現行踏襲)。
@@ -35,19 +34,29 @@ router.get('/matrix', (req, res) => {
     if (!year) return res.status(400).json({ error: 'Year is required' });
 
     const pattern = `${year}-%`;
-    const codesPlaceholder = FIXED_CODES.map(() => '?').join(',');
+    // (type, code) 対で絞る。逆 type の同一コード行 (例: 給与コード 700 に EXPENSE が付いた誤登録) を混入させない。
+    // プレースホルダは固定の数値配列を map しているだけなので SQL 注入余地はない。
+    const expensePlaceholder = EXPENSE_FIXED_CODES.map(() => '?').join(',');
+    const incomePlaceholder = INCOME_FIXED_CODES.map(() => '?').join(',');
 
     const sql = `
         SELECT id, fiscal_month, category_code, amount, description, type
         FROM transactions
         WHERE fiscal_month LIKE ?
-          AND category_code IN (${codesPlaceholder})
+          AND (
+            (type = 'EXPENSE' AND category_code IN (${expensePlaceholder}))
+            OR (type = 'INCOME' AND category_code IN (${incomePlaceholder}))
+          )
     `;
 
-    db.all(sql, [pattern, ...FIXED_CODES], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ data: rows });
-    });
+    db.all(
+        sql,
+        [pattern, ...EXPENSE_FIXED_CODES, ...INCOME_FIXED_CODES],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ data: rows });
+        }
+    );
 });
 
 // Bulk update/insert for a specific cell (Year-Month + Category)
@@ -61,10 +70,11 @@ router.post('/update_cell', (req, res) => {
 
     const fiscal_month = `${year}-${String(month).padStart(2, '0')}`;
 
-    // (fiscal_month, category_code) で一意化 (手入力給与も同一セル扱いで巻き込み許容)
+    // (fiscal_month, category_code, type) で一意化。type が変わればそれは別レコード扱い
+    // (逆 type の既存行を巻き込むと Analysis/Summary で誤分類されるため)。
     db.get(
-        'SELECT id FROM transactions WHERE fiscal_month = ? AND category_code = ?',
-        [fiscal_month, category_code],
+        'SELECT id FROM transactions WHERE fiscal_month = ? AND category_code = ? AND type = ?',
+        [fiscal_month, category_code, type],
         (err, row) => {
             if (err) return res.status(500).json({ error: err.message });
 
@@ -78,18 +88,19 @@ router.post('/update_cell', (req, res) => {
                     res.json({ status: 'ignored' });
                 }
             } else {
+                const insertDate = resolveInsertDate(fiscal_month, type);
+                const description = resolveDescription(type);
                 if (row) {
+                    // 既存行の date/description が古い type の値のまま残らないよう毎回上書き
                     db.run(
-                        'UPDATE transactions SET amount = ? WHERE id = ?',
-                        [amount, row.id],
+                        'UPDATE transactions SET amount = ?, date = ?, description = ? WHERE id = ?',
+                        [amount, insertDate, description, row.id],
                         function (err) {
                             if (err) return res.status(500).json({ error: err.message });
                             res.json({ status: 'updated' });
                         }
                     );
                 } else {
-                    const insertDate = resolveInsertDate(fiscal_month, type);
-                    const description = resolveDescription(type);
                     db.run(
                         `INSERT INTO transactions (date, fiscal_month, amount, type, category_code, description)
                          VALUES (?, ?, ?, ?, ?, ?)`,
@@ -135,8 +146,8 @@ router.post('/batch_update', async (req, res) => {
             const fiscal_month = `${year}-${String(month).padStart(2, '0')}`;
 
             const row = await dbGet(
-                'SELECT id FROM transactions WHERE fiscal_month = ? AND category_code = ?',
-                [fiscal_month, category_code]
+                'SELECT id FROM transactions WHERE fiscal_month = ? AND category_code = ? AND type = ?',
+                [fiscal_month, category_code, type]
             );
 
             if (amount === '' || amount === null || amount === 0 || amount === '0') {
@@ -144,11 +155,14 @@ router.post('/batch_update', async (req, res) => {
                     await dbRun('DELETE FROM transactions WHERE id = ?', [row.id]);
                 }
             } else {
+                const insertDate = resolveInsertDate(fiscal_month, type);
+                const description = resolveDescription(type);
                 if (row) {
-                    await dbRun('UPDATE transactions SET amount = ? WHERE id = ?', [amount, row.id]);
+                    await dbRun(
+                        'UPDATE transactions SET amount = ?, date = ?, description = ? WHERE id = ?',
+                        [amount, insertDate, description, row.id]
+                    );
                 } else {
-                    const insertDate = resolveInsertDate(fiscal_month, type);
-                    const description = resolveDescription(type);
                     await dbRun(
                         `INSERT INTO transactions (date, fiscal_month, amount, type, category_code, description)
                          VALUES (?, ?, ?, ?, ?, ?)`,
