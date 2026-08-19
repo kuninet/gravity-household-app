@@ -16,7 +16,7 @@
   - `ReceiptOCR.vue`: Gemini APIを用いたレシート解析 (Drag & Drop, 税区分選択)
   - `ReceiptSplitter.vue`: 支払総額からの内訳計算、税額自動計算
   - `ExcelImport.vue`: バックアップ、リストア、Excel一括取込
-  - `FixedCostManager.vue`: 固定費のマトリクス入力、Excelペースト対応
+  - `FixedCostManager.vue`: 毎月の固定入力（収入・支出）のマトリクス入力、Excelペースト対応
   - `YearlyAnalysis.vue`: 年次収支のグラフ・表表示
 
 ### バックエンド (`/server`)
@@ -47,7 +47,7 @@
 ├── server/                 # バックエンド・ソースコード
 │   ├── routes/             # APIエンドポイント定義
 │   │   ├── transactions.js # 家計簿CRUD
-│   │   ├── fixed_costs.js  # 固定費管理
+│   │   ├── fixed_costs.js  # 毎月の固定入力（収入・支出）管理
 │   │   ├── ocr.js          # Gemini OCR処理
 │   │   ├── import.js       # Excelインポート
 │   │   └── backup.js       # 全データバックアップ・復元・削除

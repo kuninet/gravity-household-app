@@ -26,12 +26,23 @@ Gemini API (AI) を使用して、レシート画像やPDFから品目と金額�
 ### 自動入力機能
 - カテゴリを選択した際、コードが 100番台（食費）なら自動的に「税抜8%」、それ以外なら「税抜10%」がデフォルトセットされます。
 
-## 3. 固定費管理 (`FixedCostManager.vue`)
-年間の固定費（家賃、光熱費など）をマトリクス形式で表示・編集します。
+## 3. 毎月の固定入力（収入・支出） (`FixedCostManager.vue`)
+年間の固定費（家賃、光熱費など）と固定収入（給与）をマトリクス形式で並べて表示・編集します。
+
+### 扱うカテゴリ
+- **支出 (`type=EXPENSE`)**: `category_code` が `601`〜`608`（電気・水道・ガス・家賃・電話などの固定費・公共料金）と `901`（小遣い）。
+- **収入 (`type=INCOME`)**: `category_code=700`（給与）。現状は給与のみで、拡張時は `FixedCostManager.vue` の `INCOME_FIXED_CODES` に対象コードを追加します。
+
+### 保存レコードの仕様
+- 支出は現行踏襲で、`description` は「固定費入力」。
+- 収入（給与）は `description` を「給与(固定入力)」とし、`date` はその `fiscal_month` に必ず含まれる **前月 25 日** を格納します（例: `fiscal_month=2026-09` なら `date=2026-08-25`）。`getFiscalMonth(date)` と `fiscal_month` が整合する側の日付を採用しています。
+
+### API
+- セル単体更新 `POST /api/fixed_costs/update_cell` と一括更新 `POST /api/fixed_costs/batch_update` は `type` 引数を受け取り、INCOME/EXPENSE を混在させて Upsert できます。`type` 省略時は `EXPENSE` として扱い、後方互換を保ちます。
 
 ### Excelペースト機能
 - Excelからコピーしたデータを、画面上の任意のセルで `Ctrl+V` (Cmd+V) することで貼り付け可能です。
-- クリップボードのTSVデータを解析し、セル位置を起点として右・下方向にデータを一括更新します (`/api/fixed-costs/batch_update`)。
+- クリップボードのTSVデータを解析し、セル位置を起点として右・下方向にデータを一括更新します (`/api/fixed_costs/batch_update`)。
 
 ## 4. データ管理: エクスポート・バックアップ (`ExcelImport.vue`, `backup.js`)
 データの保全と外部連携のための機能群です。

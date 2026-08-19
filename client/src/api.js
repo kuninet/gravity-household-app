@@ -91,6 +91,8 @@ export async function fetchFixedCostMatrix(year) {
     return res.json();
 }
 
+// data: { year, month, category_code, amount, type }
+// type は省略時サーバー側で 'EXPENSE' 扱い (後方互換)。呼び出し側から伝搬させる。
 export async function updateFixedCostCell(data) {
     const res = await fetch(`${API_BASE}/fixed_costs/update_cell`, {
         method: 'POST',
@@ -103,6 +105,7 @@ export async function updateFixedCostCell(data) {
     return res.json();
 }
 
+// data: { year, cells: [{ month, category_code, amount, type }] }
 export async function updateFixedCostBatch(data) {
     const res = await fetch(`${API_BASE}/fixed_costs/batch_update`, {
         method: 'POST',

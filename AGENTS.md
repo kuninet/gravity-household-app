@@ -29,7 +29,7 @@ PR のタイトル・本文、Issue、コミットメッセージ、AGENTS.md、
 - `client/src/api.js`: フロントエンドからバックエンド API への呼び出し
 - `client/src/utils.js`: 会計月などの共通ユーティリティ
 - `client/src/components/TransactionForm.vue`: 日々の収支入力、履歴コピー、OCR、内訳入力の起点
-- `client/src/components/FixedCostManager.vue`: 固定費マトリクスと Excel ペースト
+- `client/src/components/FixedCostManager.vue`: 毎月の固定入力（収入・支出）マトリクスと Excel ペースト。支出（固定費・公共料金）と収入（給与）を横並びで扱う
 - `client/src/components/ExcelImport.vue`: バックアップ、リストア、Excel 取込
 - `server/app.js`: Express アプリと API ルート登録
 - `server/db.js`: SQLite 接続と基本スキーマ作成
@@ -43,6 +43,8 @@ PR のタイトル・本文、Issue、コミットメッセージ、AGENTS.md、
 - 会計月ロジックはフロントエンドとバックエンドの双方に存在するため、変更時は両側の整合を確認してください。
 - 支出と収入は `transactions.type` の `EXPENSE` / `INCOME` で区別します。
 - カテゴリは `categories.code` と `categories.group_name` に依存して集計されます。
+- 「毎月の固定入力」画面の収入は現状「給与」（`category_code=700`）のみを扱います。拡張時は `FixedCostManager.vue` の `INCOME_FIXED_CODES` に対象コードを追加してください。
+- 固定入力で登録する給与レコードの `date` は、その `fiscal_month` に必ず含まれる日付（前月 25 日）で保存します。`fiscal_month` と `getFiscalMonth(date)` が整合する側の日付を採用してください。
 - レシート OCR は Gemini API を使います。OCR 関連の動作確認には `server/.env` の `GEMINI_API_KEY` が必要です。
 - 割引、値引き、クーポンなどのマイナス金額は有効な支出明細として保存し、常に税込扱いにしてください。税抜モードでもマイナス金額に税率を掛けないでください。
 - バックアップ CSV は Excel で扱いやすいよう Shift_JIS で出力されます。
