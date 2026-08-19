@@ -173,6 +173,24 @@ const getSectionGrandTotal = (codes) => {
     })
     return sum
 }
+
+// 集計セクション (収入合計/支出合計/差引)。
+// matrix の変更に追従し、月別/年計をまとめて 1 度だけ計算する。
+const summary = computed(() => {
+    const income = months.map(m => sumForCodes(m, INCOME_FIXED_CODES))
+    const expense = months.map(m => sumForCodes(m, EXPENSE_FIXED_CODES))
+    const net = income.map((v, i) => v - expense[i])
+    const incomeYear = income.reduce((s, v) => s + v, 0)
+    const expenseYear = expense.reduce((s, v) => s + v, 0)
+    return {
+        income,
+        expense,
+        net,
+        incomeYear,
+        expenseYear,
+        netYear: incomeYear - expenseYear,
+    }
+})
 </script>
 
 <template>
@@ -277,6 +295,57 @@ const getSectionGrandTotal = (codes) => {
                     </td>
                     <td class="p-2 border text-right font-mono text-blue-900">
                         ¥{{ getSectionGrandTotal(EXPENSE_FIXED_CODES).toLocaleString() }}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 集計セクション (収入合計 / 支出合計 / 差引) -->
+    <h3 class="text-lg font-bold text-gray-700 mt-6 mb-2">集計</h3>
+    <div class="bg-white rounded shadow overflow-x-auto">
+        <table class="w-full text-sm border-collapse">
+            <thead class="bg-gray-100 text-gray-600">
+                <tr>
+                    <th class="p-2 border bg-gray-100 sticky left-0 z-10 w-28">項目</th>
+                    <th v-for="m in months" :key="m" class="p-2 border min-w-[90px] font-bold">{{ Number(m) }}月</th>
+                    <th class="p-2 border bg-yellow-50 font-bold min-w-[110px]">年計</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="hover:bg-gray-50">
+                    <td class="p-2 border font-bold text-center sticky left-0 bg-green-50 z-10">収入合計</td>
+                    <td v-for="(v, i) in summary.income" :key="`inc-${i}`" class="p-2 border text-right font-mono">
+                        ¥{{ v.toLocaleString() }}
+                    </td>
+                    <td class="p-2 border text-right font-mono font-bold bg-green-50">
+                        ¥{{ summary.incomeYear.toLocaleString() }}
+                    </td>
+                </tr>
+                <tr class="hover:bg-gray-50">
+                    <td class="p-2 border font-bold text-center sticky left-0 bg-yellow-50 z-10">支出合計</td>
+                    <td v-for="(v, i) in summary.expense" :key="`exp-${i}`" class="p-2 border text-right font-mono">
+                        ¥{{ v.toLocaleString() }}
+                    </td>
+                    <td class="p-2 border text-right font-mono font-bold bg-yellow-50">
+                        ¥{{ summary.expenseYear.toLocaleString() }}
+                    </td>
+                </tr>
+                <tr class="bg-blue-50 font-bold border-t-2 border-blue-200">
+                    <td class="p-2 border text-center sticky left-0 bg-blue-100 z-10">差引</td>
+                    <td
+                        v-for="(v, i) in summary.net"
+                        :key="`net-${i}`"
+                        class="p-2 border text-right font-mono"
+                        :class="v < 0 ? 'text-red-600 font-bold' : 'text-blue-900'"
+                    >
+                        ¥{{ v.toLocaleString() }}
+                    </td>
+                    <td
+                        class="p-2 border text-right font-mono"
+                        :class="summary.netYear < 0 ? 'text-red-600 font-bold' : 'text-blue-900 font-bold'"
+                    >
+                        ¥{{ summary.netYear.toLocaleString() }}
                     </td>
                 </tr>
             </tbody>
