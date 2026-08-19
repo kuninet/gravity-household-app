@@ -119,7 +119,7 @@ const changeMonth = (offset) => {
                         @click="currentView = 'fixed_costs'"
                         class="px-4 py-2 rounded-md transition font-bold"
                         :class="currentView === 'fixed_costs' ? 'bg-white text-blue-700 shadow' : 'text-blue-100 hover:bg-blue-600'">
-                        固定費入力
+                        固定入力
                     </button>
                     <button 
                         @click="currentView = 'import'"
