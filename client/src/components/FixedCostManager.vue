@@ -232,10 +232,10 @@ const summary = computed(() => {
                     <thead class="bg-gray-100 text-gray-600">
                         <tr>
                             <th class="p-2 border bg-gray-100 sticky left-0 z-10 w-20">月</th>
-                            <th v-for="cat in incomeCategories" :key="cat.code" class="p-2 border min-w-[120px] font-bold">
+                            <th v-for="cat in incomeCategories" :key="cat.code" class="p-2 border min-w-[120px] font-bold whitespace-nowrap">
                                 {{ cat.name }}
                             </th>
-                            <th class="p-2 border bg-green-50 font-bold min-w-[120px]">収入計</th>
+                            <th class="p-2 border bg-green-50 font-bold min-w-[120px] whitespace-nowrap">収入計</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -283,10 +283,10 @@ const summary = computed(() => {
                     <thead class="bg-gray-100 text-gray-600">
                         <tr>
                             <th class="p-2 border bg-gray-100 sticky left-0 z-10 w-20">月</th>
-                            <th v-for="cat in expenseCategories" :key="cat.code" class="p-2 border min-w-[100px] font-bold">
+                            <th v-for="cat in expenseCategories" :key="cat.code" class="p-2 border min-w-[100px] font-bold whitespace-nowrap">
                                 {{ cat.name }}
                             </th>
-                            <th class="p-2 border bg-yellow-50 font-bold min-w-[100px]">合計</th>
+                            <th class="p-2 border bg-yellow-50 font-bold min-w-[100px] whitespace-nowrap">合計</th>
                         </tr>
                     </thead>
                     <tbody>
