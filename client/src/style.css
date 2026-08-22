@@ -1,1 +1,112 @@
 @import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  --font-serif: "Instrument Serif", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ground: #faf9f7;
+  --color-surface: #ffffff;
+  --color-surface-2: #f5f3ee;
+  --color-ink: #1a1a1a;
+  --color-ink-2: #55534e;
+  --color-ink-3: #8a8781;
+  --color-rule: #e8e5df;
+  --color-rule-soft: #f0ede7;
+
+  --color-accent: #2d5a3d;
+  --color-accent-soft: #e6ede8;
+
+  --color-pos: #2d5a3d;
+  --color-pos-soft: #e6ede8;
+  --color-neg: #a4443c;
+  --color-neg-soft: #f4e6e4;
+
+  --color-cat-food: #6b7a3e;
+  --color-cat-food-soft: #f2f0e4;
+  --color-cat-util: #7a5f2e;
+  --color-cat-util-soft: #f5eedb;
+  --color-cat-trans: #4a6a7a;
+  --color-cat-trans-soft: #e4ecf1;
+  --color-cat-leisure: #7a4a6a;
+  --color-cat-leisure-soft: #f1e4ec;
+  --color-cat-health: #a4443c;
+  --color-cat-health-soft: #f4e6e4;
+  --color-cat-comm: #5a5a7a;
+  --color-cat-comm-soft: #e8e8ef;
+  --color-cat-edu: #4a7a6a;
+  --color-cat-edu-soft: #e4efeb;
+  --color-cat-other: #75726a;
+  --color-cat-other-soft: #efece6;
+  --color-cat-income: #2d5a3d;
+  --color-cat-income-soft: #e6ede8;
+
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+}
+
+.dark {
+  --color-ground: #14130f;
+  --color-surface: #1c1b17;
+  --color-surface-2: #24221d;
+  --color-ink: #f2efe8;
+  --color-ink-2: #b8b3a8;
+  --color-ink-3: #75726a;
+  --color-rule: #2a2823;
+  --color-rule-soft: #24221d;
+
+  --color-accent: #7fb890;
+  --color-accent-soft: #22302a;
+
+  --color-pos: #7fb890;
+  --color-pos-soft: #22302a;
+  --color-neg: #d48a83;
+  --color-neg-soft: #33231f;
+
+  --color-cat-food: #a8b76a;
+  --color-cat-food-soft: #28281c;
+  --color-cat-util: #c6a166;
+  --color-cat-util-soft: #2b2519;
+  --color-cat-trans: #7fa0b0;
+  --color-cat-trans-soft: #1c2529;
+  --color-cat-leisure: #b284a0;
+  --color-cat-leisure-soft: #291f27;
+  --color-cat-health: #d48a83;
+  --color-cat-health-soft: #2c1f1d;
+  --color-cat-comm: #9a9ac2;
+  --color-cat-comm-soft: #22222c;
+  --color-cat-edu: #7ab5a2;
+  --color-cat-edu-soft: #1c2926;
+  --color-cat-other: #a09d94;
+  --color-cat-other-soft: #26241f;
+  --color-cat-income: #7fb890;
+  --color-cat-income-soft: #22302a;
+}
+
+html {
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "palt";
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background: var(--color-ground);
+  color: var(--color-ink);
+}
+
+.font-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes fadeIn {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
