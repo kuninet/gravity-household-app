@@ -181,15 +181,13 @@ const NAV_ITEMS = [
         <!-- Summary Cards -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <!-- 収入 -->
-          <div class="bg-surface border border-rule rounded-xl px-4 py-3.5">
-            <div class="flex justify-between items-center mb-1.5">
-              <span class="text-[10px] tracking-[0.14em] uppercase text-ink-3 font-semibold">収入</span>
-              <span
-                v-if="deltaFor('income').pct !== null"
-                class="font-mono text-[10px] px-1.5 py-[2px] rounded"
-                :class="deltaFor('income').diff >= 0 ? 'bg-pos-soft text-pos' : 'bg-neg-soft text-neg'"
-              >{{ fmtPct(deltaFor('income').pct) }}</span>
-            </div>
+          <div class="relative bg-surface border border-rule rounded-xl px-4 py-3.5">
+            <h3 class="m-0 mb-1.5 text-[10px] tracking-[0.14em] uppercase text-ink-3 font-semibold">収入</h3>
+            <span
+              v-if="deltaFor('income').pct !== null"
+              class="absolute top-3.5 right-3.5 font-mono text-[10px] px-1.5 py-[2px] rounded"
+              :class="deltaFor('income').diff >= 0 ? 'bg-pos-soft text-pos' : 'bg-neg-soft text-neg'"
+            >{{ fmtPct(deltaFor('income').pct) }}</span>
             <p class="m-0 text-[22px] font-semibold text-pos font-mono font-tabular tracking-tight leading-none">
               <span class="text-[13px] text-ink-3 font-medium mr-0.5">¥</span>{{ fmt(summary.total.income) }}
             </p>
@@ -200,15 +198,13 @@ const NAV_ITEMS = [
           </div>
 
           <!-- 支出 -->
-          <div class="bg-surface border border-rule rounded-xl px-4 py-3.5">
-            <div class="flex justify-between items-center mb-1.5">
-              <span class="text-[10px] tracking-[0.14em] uppercase text-ink-3 font-semibold">支出</span>
-              <span
-                v-if="deltaFor('expense').pct !== null"
-                class="font-mono text-[10px] px-1.5 py-[2px] rounded"
-                :class="deltaFor('expense').diff <= 0 ? 'bg-pos-soft text-pos' : 'bg-neg-soft text-neg'"
-              >{{ fmtPct(deltaFor('expense').pct) }}</span>
-            </div>
+          <div class="relative bg-surface border border-rule rounded-xl px-4 py-3.5">
+            <h3 class="m-0 mb-1.5 text-[10px] tracking-[0.14em] uppercase text-ink-3 font-semibold">支出</h3>
+            <span
+              v-if="deltaFor('expense').pct !== null"
+              class="absolute top-3.5 right-3.5 font-mono text-[10px] px-1.5 py-[2px] rounded"
+              :class="deltaFor('expense').diff <= 0 ? 'bg-pos-soft text-pos' : 'bg-neg-soft text-neg'"
+            >{{ fmtPct(deltaFor('expense').pct) }}</span>
             <p class="m-0 text-[22px] font-semibold text-neg font-mono font-tabular tracking-tight leading-none">
               <span class="text-[13px] text-ink-3 font-medium mr-0.5">¥</span>{{ fmt(summary.total.expense) }}
             </p>
@@ -219,14 +215,12 @@ const NAV_ITEMS = [
           </div>
 
           <!-- 収支差 -->
-          <div class="bg-surface border border-rule rounded-xl px-4 py-3.5">
-            <div class="flex justify-between items-center mb-1.5">
-              <span class="text-[10px] tracking-[0.14em] uppercase text-ink-3 font-semibold">収支差</span>
-              <span
-                class="font-mono text-[10px] px-1.5 py-[2px] rounded"
-                :class="summary.total.balance >= 0 ? 'bg-pos-soft text-pos' : 'bg-neg-soft text-neg'"
-              >{{ summary.total.balance >= 0 ? '黒字' : '赤字' }}</span>
-            </div>
+          <div class="relative bg-surface border border-rule rounded-xl px-4 py-3.5">
+            <h3 class="m-0 mb-1.5 text-[10px] tracking-[0.14em] uppercase text-ink-3 font-semibold">収支差</h3>
+            <span
+              class="absolute top-3.5 right-3.5 font-mono text-[10px] px-1.5 py-[2px] rounded"
+              :class="summary.total.balance >= 0 ? 'bg-pos-soft text-pos' : 'bg-neg-soft text-neg'"
+            >{{ summary.total.balance >= 0 ? '黒字' : '赤字' }}</span>
             <p class="m-0 text-[22px] font-semibold font-mono font-tabular tracking-tight leading-none"
               :class="summary.total.balance >= 0 ? 'text-ink' : 'text-neg'"
             >
