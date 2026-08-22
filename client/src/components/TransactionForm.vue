@@ -300,7 +300,7 @@ const applyOCR = (result) => {
 
 <template>
   <div
-    class="bg-white p-4 rounded shadow mb-6 relative"
+    class="bg-surface border border-rule rounded-xl p-5 mb-6 relative"
     @dragenter="onFormDragEnter"
     @dragover="onFormDragOver"
     @dragleave="onFormDragLeave"
@@ -309,33 +309,36 @@ const applyOCR = (result) => {
     <!-- Drop overlay: shown while user drags a file over the form (issue #19) -->
     <div
       v-if="isDraggingReceipt"
-      class="absolute inset-0 z-40 flex items-center justify-center rounded border-4 border-dashed border-green-500 bg-green-50 bg-opacity-90 pointer-events-none"
+      class="absolute inset-0 z-40 flex items-center justify-center rounded-xl border-2 border-dashed border-accent bg-accent-soft/90 pointer-events-none"
     >
         <div class="text-center">
-            <div class="text-5xl mb-2">📥</div>
-            <div class="font-bold text-green-700 text-lg">ここにレシート (PDF / 画像) をドロップ</div>
-            <div class="text-green-600 text-sm mt-1">AI 解析モーダルが開きます</div>
+            <div class="text-4xl mb-2">📥</div>
+            <div class="font-semibold text-accent text-base">ここにレシート (PDF / 画像) をドロップ</div>
+            <div class="text-accent text-xs mt-1 opacity-80">AI 解析モーダルが開きます</div>
         </div>
     </div>
 
     <div class="flex justify-between items-center mb-4">
-        <h2 class="text-xl font-bold">新規入力</h2>
-        <button type="button" @click="openOCR" class="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1 rounded text-sm font-bold flex items-center">
-            <span class="mr-1">📷</span> レシート読取 (AI)
+        <div class="flex items-baseline gap-2">
+            <h2 class="text-[14px] font-semibold text-ink m-0">新規入力</h2>
+            <span class="text-[10px] tracking-[0.14em] uppercase text-ink-3 font-semibold">NEW ENTRY</span>
+        </div>
+        <button type="button" @click="openOCR" class="bg-accent-soft hover:bg-accent hover:text-white text-accent px-3 py-1.5 rounded-md text-[12px] font-semibold flex items-center gap-1.5 transition">
+            <span>📷</span><span>レシート読取 (AI)</span>
         </button>
     </div>
-    
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- Form Area -->
         <form @submit.prevent="submit" class="space-y-3">
             <div class="grid grid-cols-2 gap-2">
                 <div>
-                    <label class="block text-sm font-bold">日付</label>
-                    <input type="date" v-model="form.date" class="border p-2 w-full rounded" required>
+                    <label class="block text-[10px] tracking-[0.12em] uppercase text-ink-3 font-semibold mb-1">日付</label>
+                    <input type="date" v-model="form.date" class="border border-rule bg-surface text-ink p-2 w-full rounded-md text-[13px] focus:outline-none focus:border-accent" required>
                 </div>
                 <div>
-                    <label class="block text-sm font-bold">収支</label>
-                    <select v-model="form.type" class="border p-2 w-full rounded">
+                    <label class="block text-[10px] tracking-[0.12em] uppercase text-ink-3 font-semibold mb-1">収支</label>
+                    <select v-model="form.type" class="border border-rule bg-surface text-ink p-2 w-full rounded-md text-[13px] focus:outline-none focus:border-accent">
                         <option value="EXPENSE">支出</option>
                         <option value="INCOME">収入</option>
                     </select>
@@ -343,12 +346,12 @@ const applyOCR = (result) => {
             </div>
 
             <div>
-                <label class="block text-sm font-bold">
+                <label class="block text-[10px] tracking-[0.12em] uppercase text-ink-3 font-semibold mb-1">
                     費目
-                    <span v-if="splitterState.items.length > 0" class="text-xs font-normal text-gray-500">(内訳ありのため自動判定)</span>
-                    <span v-else class="text-xs font-normal text-gray-500">(メイン: 食費など)</span>
+                    <span v-if="splitterState.items.length > 0" class="text-[10px] normal-case tracking-normal text-ink-3 font-normal ml-1">(内訳ありのため自動判定)</span>
+                    <span v-else class="text-[10px] normal-case tracking-normal text-ink-3 font-normal ml-1">(メイン: 食費など)</span>
                 </label>
-                <select v-model="form.category_code" class="border p-2 w-full rounded" :required="splitterState.items.length === 0" :disabled="isLoading">
+                <select v-model="form.category_code" class="border border-rule bg-surface text-ink p-2 w-full rounded-md text-[13px] focus:outline-none focus:border-accent" :required="splitterState.items.length === 0" :disabled="isLoading">
                     <option value="" :disabled="splitterState.items.length === 0">
                         {{ isLoading ? '読み込み中...' : (splitterState.items.length > 0 ? '(内訳の最大金額から自動)' : '選択してください') }}
                     </option>
@@ -360,33 +363,33 @@ const applyOCR = (result) => {
 
             <div class="grid grid-cols-2 gap-2">
                 <div>
-                    <label class="block text-sm font-bold">金額</label>
-                    <div class="flex space-x-2">
-                        <input type="number" v-model="form.amount" class="border p-2 w-full rounded" :required="splitterState.items.length === 0" placeholder="0">
-                        <button type="button" @click="openSplitter" class="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 p-2 rounded text-xs font-bold whitespace-nowrap" title="レシート内訳計算">
+                    <label class="block text-[10px] tracking-[0.12em] uppercase text-ink-3 font-semibold mb-1">金額</label>
+                    <div class="flex gap-2">
+                        <input type="number" v-model="form.amount" class="border border-rule bg-surface text-ink p-2 w-full rounded-md text-[13px] font-mono font-tabular focus:outline-none focus:border-accent" :required="splitterState.items.length === 0" placeholder="0">
+                        <button type="button" @click="openSplitter" class="bg-cat-util-soft hover:bg-cat-util hover:text-white text-cat-util px-2.5 py-2 rounded-md text-[11px] font-semibold whitespace-nowrap transition" title="レシート内訳計算">
                             内訳
-                            <span v-if="splitterState.items.length > 0" class="ml-1 bg-yellow-600 text-white rounded-full px-1.5 py-0.5 text-[10px]">
+                            <span v-if="splitterState.items.length > 0" class="ml-1 bg-cat-util text-white rounded-full px-1.5 py-0.5 text-[10px]">
                                 +{{ splitterState.items.length }}
                             </span>
                         </button>
                     </div>
-                    <div v-if="splitterState.total" class="text-xs text-gray-500 mt-1 text-right">
-                        レシート合計: <span class="font-bold">¥{{ Number(splitterState.total).toLocaleString() }}</span>
+                    <div v-if="splitterState.total" class="text-[11px] text-ink-3 mt-1 text-right">
+                        レシート合計: <span class="font-semibold text-ink font-mono font-tabular">¥{{ Number(splitterState.total).toLocaleString() }}</span>
                     </div>
                 </div>
                 <div>
-                    <label class="block text-sm font-bold">品名</label>
-                    <input type="text" v-model="form.description" class="border p-2 w-full rounded" placeholder="品名">
+                    <label class="block text-[10px] tracking-[0.12em] uppercase text-ink-3 font-semibold mb-1">品名</label>
+                    <input type="text" v-model="form.description" class="border border-rule bg-surface text-ink p-2 w-full rounded-md text-[13px] focus:outline-none focus:border-accent" placeholder="品名">
                 </div>
             </div>
 
             <div>
-                <label class="block text-sm font-bold">備考</label>
-                <input type="text" v-model="form.memo" class="border p-2 w-full rounded" placeholder="メモ">
+                <label class="block text-[10px] tracking-[0.12em] uppercase text-ink-3 font-semibold mb-1">備考</label>
+                <input type="text" v-model="form.memo" class="border border-rule bg-surface text-ink p-2 w-full rounded-md text-[13px] focus:outline-none focus:border-accent" placeholder="メモ">
             </div>
 
-            <button type="submit" 
-                class="bg-blue-600 text-white py-2 px-4 rounded w-full hover:bg-blue-700 font-bold disabled:bg-blue-300 disabled:cursor-not-allowed"
+            <button type="submit"
+                class="bg-accent text-white py-2.5 px-4 rounded-md w-full hover:opacity-90 font-semibold text-[13px] disabled:opacity-50 disabled:cursor-not-allowed transition"
                 :disabled="isSubmitting">
                 <span v-if="isSubmitting">送信中...</span>
                 <span v-else>登録する (一括)</span>
@@ -394,17 +397,17 @@ const applyOCR = (result) => {
         </form>
 
         <!-- History/Copy Area -->
-        <div class="bg-gray-50 p-3 rounded text-sm">
-            <h3 class="font-bold mb-2 text-gray-600">最近の履歴からコピー</h3>
-            <ul class="space-y-2">
-                <li v-for="tx in recentTransactions" :key="tx.id" 
+        <div class="bg-rule-soft/50 border border-rule rounded-lg p-3 text-[12px]">
+            <h3 class="font-semibold mb-2 text-[10px] tracking-[0.12em] uppercase text-ink-3">最近の履歴からコピー</h3>
+            <ul class="space-y-1.5">
+                <li v-for="tx in recentTransactions" :key="tx.id"
                     @click="copy(tx)"
-                    class="cursor-pointer hover:bg-blue-100 p-2 rounded border bg-white flex justify-between items-center transition">
-                    <div>
-                        <span class="font-bold text-gray-700">{{ tx.description || '名称なし' }}</span>
-                        <span class="text-xs text-gray-500 ml-2">{{ tx.date }}</span>
+                    class="cursor-pointer hover:bg-accent-soft/50 hover:border-accent p-2 rounded-md border border-rule bg-surface flex justify-between items-center transition">
+                    <div class="min-w-0">
+                        <div class="font-medium text-ink truncate">{{ tx.description || '名称なし' }}</div>
+                        <div class="text-[10px] text-ink-3 font-mono font-tabular">{{ tx.date }}</div>
                     </div>
-                    <div class="font-mono">¥{{ tx.amount }}</div>
+                    <div class="font-mono font-tabular text-ink whitespace-nowrap">¥{{ Number(tx.amount).toLocaleString() }}</div>
                 </li>
             </ul>
         </div>
