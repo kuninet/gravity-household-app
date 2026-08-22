@@ -1,1 +1,135 @@
 @import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  --font-serif: "Instrument Serif", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ground: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-surface-2: #eff1f5;
+  --color-ink: #17202e;
+  --color-ink-2: #4b5566;
+  --color-ink-3: #8590a3;
+  --color-rule: #dfe3eb;
+  --color-rule-soft: #e9ecf2;
+
+  --color-accent: #2b5aa0;
+  --color-accent-soft: #dce5f2;
+
+  --color-pos: #2b7a4d;
+  --color-pos-soft: #dcede2;
+  --color-neg: #c94a3f;
+  --color-neg-soft: #fbe4e0;
+
+  --color-cat-food: #6b9c40;
+  --color-cat-food-soft: #ebf0dc;
+  --color-cat-util: #d18a2b;
+  --color-cat-util-soft: #f8ecc9;
+  --color-cat-trans: #5d7fa8;
+  --color-cat-trans-soft: #e0e7f1;
+  --color-cat-leisure: #a85e8a;
+  --color-cat-leisure-soft: #f2e0ec;
+  --color-cat-health: #c14e40;
+  --color-cat-health-soft: #f9e0dc;
+  --color-cat-comm: #6a6fb8;
+  --color-cat-comm-soft: #e2e3f2;
+  --color-cat-edu: #3a9080;
+  --color-cat-edu-soft: #d8ece7;
+  --color-cat-other: #7b8290;
+  --color-cat-other-soft: #ebedf1;
+  --color-cat-income: #2b7a4d;
+  --color-cat-income-soft: #dcede2;
+
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+}
+
+.dark {
+  --color-ground: #0f1420;
+  --color-surface: #171e2c;
+  --color-surface-2: #1f2738;
+  --color-ink: #ecf0f6;
+  --color-ink-2: #a7b1c2;
+  --color-ink-3: #6f7a8c;
+  --color-rule: #2b3244;
+  --color-rule-soft: #212838;
+
+  --color-accent: #6b9adf;
+  --color-accent-soft: #1c2a44;
+
+  --color-pos: #6dc48f;
+  --color-pos-soft: #1a2d24;
+  --color-neg: #e88478;
+  --color-neg-soft: #2e1f1c;
+
+  --color-cat-food: #a4c76c;
+  --color-cat-food-soft: #232a19;
+  --color-cat-util: #e5b25a;
+  --color-cat-util-soft: #2d2617;
+  --color-cat-trans: #92b3d8;
+  --color-cat-trans-soft: #1c2632;
+  --color-cat-leisure: #d089b8;
+  --color-cat-leisure-soft: #2a1e27;
+  --color-cat-health: #e88478;
+  --color-cat-health-soft: #2e1f1c;
+  --color-cat-comm: #a4a8dc;
+  --color-cat-comm-soft: #22222f;
+  --color-cat-edu: #6dc4b0;
+  --color-cat-edu-soft: #1a2926;
+  --color-cat-other: #a8b1c2;
+  --color-cat-other-soft: #23283a;
+  --color-cat-income: #6dc48f;
+  --color-cat-income-soft: #1a2d24;
+}
+
+html {
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "palt";
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background: var(--color-ground);
+  color: var(--color-ink);
+}
+
+.font-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes fadeIn {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* ダーク時セーフティネット --------------------------------------------------
+   ダッシュボード以外のビュー (年次分析 / 複数年 / 固定入力 / 取込) は
+   Tailwind の bg-white / text-gray-* / bg-gray-* を多用しており、
+   本 Epic のスコープ外だが、ダーク時に読めなくなるのを避けるためだけの
+   最小限のオーバーライド。個別ページの本格リファインは別 Epic で扱う。
+   ------------------------------------------------------------------------- */
+.dark .bg-white { background-color: var(--color-surface); }
+.dark .bg-gray-100 { background-color: var(--color-surface-2); }
+.dark .bg-gray-50 { background-color: var(--color-surface-2); }
+.dark .bg-gray-200 { background-color: var(--color-rule); }
+.dark .text-gray-800 { color: var(--color-ink); }
+.dark .text-gray-700 { color: var(--color-ink); }
+.dark .text-gray-600 { color: var(--color-ink-2); }
+.dark .text-gray-500 { color: var(--color-ink-2); }
+.dark .text-gray-400 { color: var(--color-ink-3); }
+.dark .text-gray-300 { color: var(--color-ink-3); }
+.dark .border-gray-200 { border-color: var(--color-rule); }
+.dark .border-gray-300 { border-color: var(--color-rule); }
+.dark .bg-blue-50 { background-color: var(--color-accent-soft); }
+.dark .bg-green-50 { background-color: var(--color-pos-soft); }
+.dark .bg-red-50 { background-color: var(--color-neg-soft); }
+.dark .bg-yellow-50 { background-color: var(--color-cat-util-soft); }
