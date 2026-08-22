@@ -2,9 +2,15 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 
+// 給与 (INCOME/700) 用の定数は複数ヶ所から参照するため上流で 1 箇所に定義しておく。
+const SALARY_CATEGORY_CODE = 700;
+const SALARY_TYPE = 'INCOME';
+const SALARY_DEFAULT_DESCRIPTION = '給与(固定入力)';
+const SALARY_DESCRIPTION_MAX_LENGTH = 200;
+
 // 固定入力画面で扱うカテゴリ (支出/収入で分離)
 const EXPENSE_FIXED_CODES = [604, 601, 603, 606, 602, 605, 607, 901, 608];
-const INCOME_FIXED_CODES = [700];
+const INCOME_FIXED_CODES = [SALARY_CATEGORY_CODE];
 
 // INSERT 時の date を決定する。
 // EXPENSE: 会計月の 01 日 (現行踏襲)。
@@ -25,7 +31,40 @@ function resolveInsertDate(fiscalMonth, type) {
 }
 
 function resolveDescription(type) {
-    return type === 'INCOME' ? '給与(固定入力)' : '固定費入力';
+    return type === 'INCOME' ? SALARY_DEFAULT_DESCRIPTION : '固定費入力';
+}
+
+function isPositiveInt(v) {
+    return Number.isInteger(v) && v > 0;
+}
+
+function isValidMonth(v) {
+    return Number.isInteger(v) && v >= 1 && v <= 12;
+}
+
+function isValidYear(v) {
+    return Number.isInteger(v) && v >= 2000 && v <= 2999;
+}
+
+function normalizeSalaryDescription(desc) {
+    if (desc === undefined || desc === null || desc === '') {
+        return SALARY_DEFAULT_DESCRIPTION;
+    }
+    if (typeof desc !== 'string') return null;
+    if (desc.length > SALARY_DESCRIPTION_MAX_LENGTH) return null;
+    return desc;
+}
+
+// リクエスト body の amount を数値に正規化する。
+// 数値/文字列いずれで来ても Number 変換した結果が正の整数であること。
+// (update_cell が文字列 raw を送るパターンとの整合を保つ)
+function parseAmount(raw) {
+    if (raw === undefined || raw === null || raw === '') return null;
+    if (typeof raw === 'boolean') return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return null;
+    if (!isPositiveInt(n)) return null;
+    return n;
 }
 
 // Get matrix data for a specific year
@@ -207,40 +246,19 @@ router.post('/batch_update', async (req, res) => {
 // 別ルートで id ベースの CRUD を提供する。
 // ---------------------------------------------------------------------------
 
-const SALARY_CATEGORY_CODE = 700;
-const SALARY_TYPE = 'INCOME';
-const SALARY_DEFAULT_DESCRIPTION = '給与(固定入力)';
-const SALARY_DESCRIPTION_MAX_LENGTH = 200;
-
-function isPositiveInt(v) {
-    return Number.isInteger(v) && v > 0;
-}
-
-function isValidMonth(v) {
-    return Number.isInteger(v) && v >= 1 && v <= 12;
-}
-
-function normalizeSalaryDescription(desc) {
-    if (desc === undefined || desc === null || desc === '') {
-        return SALARY_DEFAULT_DESCRIPTION;
-    }
-    if (typeof desc !== 'string') return null;
-    if (desc.length > SALARY_DESCRIPTION_MAX_LENGTH) return null;
-    return desc;
-}
-
 // POST /fixed_costs/salary : 給与明細を 1 行追加
 router.post('/salary', (req, res) => {
-    const { year, month, amount, description } = req.body || {};
+    const { year, month, description } = req.body || {};
 
-    if (!isPositiveInt(year)) {
-        return res.status(400).json({ error: 'year must be a positive integer' });
+    if (!isValidYear(year)) {
+        return res.status(400).json({ error: 'year must be an integer between 2000 and 2999' });
     }
     if (!isValidMonth(month)) {
         return res.status(400).json({ error: 'month must be an integer between 1 and 12' });
     }
-    if (!Number.isInteger(amount)) {
-        return res.status(400).json({ error: 'amount must be an integer' });
+    const amount = parseAmount(req.body ? req.body.amount : undefined);
+    if (amount === null) {
+        return res.status(400).json({ error: 'amount must be a positive integer' });
     }
     const desc = normalizeSalaryDescription(description);
     if (desc === null) {
@@ -267,9 +285,10 @@ router.put('/salary/:id', (req, res) => {
     if (!isPositiveInt(id)) {
         return res.status(400).json({ error: 'invalid id' });
     }
-    const { amount, description } = req.body || {};
-    if (!Number.isInteger(amount)) {
-        return res.status(400).json({ error: 'amount must be an integer' });
+    const { description } = req.body || {};
+    const amount = parseAmount(req.body ? req.body.amount : undefined);
+    if (amount === null) {
+        return res.status(400).json({ error: 'amount must be a positive integer' });
     }
     const desc = normalizeSalaryDescription(description);
     if (desc === null) {
@@ -292,6 +311,10 @@ router.put('/salary/:id', (req, res) => {
                 [amount, desc, id],
                 function (err) {
                     if (err) return res.status(500).json({ error: err.message });
+                    // SELECT 後の競合削除に備え、書換 0 行も 404 として扱う
+                    if (this.changes === 0) {
+                        return res.status(404).json({ error: 'salary row not found' });
+                    }
                     res.json({ status: 'updated' });
                 }
             );
@@ -316,6 +339,10 @@ router.delete('/salary/:id', (req, res) => {
             }
             db.run('DELETE FROM transactions WHERE id = ?', [id], function (err) {
                 if (err) return res.status(500).json({ error: err.message });
+                // SELECT 後の競合削除に備え、書換 0 行も 404 として扱う
+                if (this.changes === 0) {
+                    return res.status(404).json({ error: 'salary row not found' });
+                }
                 res.json({ status: 'deleted' });
             });
         }
