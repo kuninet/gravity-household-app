@@ -34,15 +34,17 @@ export function getFiscalMonthRangeLabel(fiscalMonth) {
 
 // カテゴリコードからパレット色（Tailwind クラス接尾辞）を返す。
 // 円グラフ・明細ピル・凡例で同じ色が使われるように一元化。
+// server/seed.js のグループ (100:食費 / 200:日用品 / 300:交通費 / 400:交際費 /
+// 500:医療費 / 600:固定費 / 700:収入 / 900:その他) と一致させる。
 const CATEGORY_PALETTE_MAP = {
-    100: 'food',      // 食費
-    200: 'util',      // 光熱・水道
-    300: 'trans',     // 交通・自動車
-    400: 'leisure',   // 娯楽
-    500: 'health',    // 医療
-    600: 'comm',      // 通信
-    700: 'income',    // 給与などの収入系
-    800: 'edu',       // 教育・書籍
+    100: 'food',
+    200: 'other',
+    300: 'trans',
+    400: 'leisure',
+    500: 'health',
+    600: 'util',
+    700: 'income',
+    900: 'other',
 };
 
 export function getCategoryPaletteKey(code) {

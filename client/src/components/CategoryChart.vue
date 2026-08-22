@@ -39,7 +39,10 @@ const displayTotal = computed(() => {
 
 const surfaceColor = computed(() => {
   themeBump.value // eslint-disable-line no-unused-expressions
-  return getComputedStyle(document.documentElement).getPropertyValue('--color-surface').trim() || '#ffffff'
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--color-surface').trim()
+  if (v) return v
+  // 変数未解決時のフォールバックはテーマに合わせて出し分け（ダーク時に白ボーダーで浮かないように）
+  return document.documentElement.classList.contains('dark') ? '#1c1b17' : '#ffffff'
 })
 
 const chartData = computed(() => ({

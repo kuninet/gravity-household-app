@@ -15,7 +15,7 @@ const currentView = ref('dashboard') // 'dashboard' | 'analysis' | 'multi_year_a
 const transactions = ref([])
 const categories = ref([])
 const summary = ref({ total: { income: 0, expense: 0, balance: 0 }, by_category: [], comparison: [] })
-const prevSummary = ref({ total: { income: 0, expense: 0, balance: 0 } })
+const prevSummary = ref(null)
 
 const currentMonth = ref(getFiscalMonth(new Date()))
 const isDark = ref(document.documentElement.classList.contains('dark'))
@@ -48,16 +48,22 @@ const prevMonth = (fiscal) => {
 
 const loadData = async () => {
     try {
-        const [txRes, sumRes, prevSumRes] = await Promise.all([
+        const [txRes, sumRes] = await Promise.all([
             fetchTransactions(currentMonth.value),
             fetchSummary(currentMonth.value),
-            fetchSummary(prevMonth(currentMonth.value)).catch(() => ({ total: { income: 0, expense: 0, balance: 0 } })),
         ])
         transactions.value = txRes.data
         summary.value = sumRes
-        prevSummary.value = prevSumRes
     } catch (e) {
         console.error(e)
+    }
+    // 前月サマリは delta 表示専用。取得失敗時は前月データを nullish に戻し、
+    // カードの delta 表示自体を隠す（前月 0 円として黒字ぶった振る舞いをしない）。
+    try {
+        prevSummary.value = await fetchSummary(prevMonth(currentMonth.value))
+    } catch (e) {
+        console.warn('前月サマリ取得に失敗しました。delta 表示を無効化します。', e)
+        prevSummary.value = null
     }
 }
 
@@ -95,8 +101,9 @@ const toggleTheme = () => {
     localStorage.setItem('gravity-theme', isDark.value ? 'dark' : 'light')
 }
 
-// サマリー差分（前月比 delta）
+// サマリー差分（前月比 delta）。前月データ取得失敗時は null を返し、UI 側で表示を隠す。
 const deltaFor = (kind) => {
+    if (!prevSummary.value) return null
     const cur = summary.value.total?.[kind] ?? 0
     const prev = prevSummary.value.total?.[kind] ?? 0
     const diff = cur - prev
@@ -184,14 +191,14 @@ const NAV_ITEMS = [
           <div class="relative bg-surface border border-rule rounded-xl px-4 py-3.5">
             <h3 class="m-0 mb-1.5 text-[10px] tracking-[0.14em] uppercase text-ink-3 font-semibold">収入</h3>
             <span
-              v-if="deltaFor('income').pct !== null"
+              v-if="deltaFor('income') && deltaFor('income').pct !== null"
               class="absolute top-3.5 right-3.5 font-mono text-[10px] px-1.5 py-[2px] rounded"
               :class="deltaFor('income').diff >= 0 ? 'bg-pos-soft text-pos' : 'bg-neg-soft text-neg'"
             >{{ fmtPct(deltaFor('income').pct) }}</span>
             <p class="m-0 text-[22px] font-semibold text-pos font-mono font-tabular tracking-tight leading-none">
               <span class="text-[13px] text-ink-3 font-medium mr-0.5">¥</span>{{ fmt(summary.total.income) }}
             </p>
-            <div class="mt-3 pt-2.5 border-t border-dashed border-rule flex justify-between text-[11px] text-ink-3 font-tabular">
+            <div v-if="deltaFor('income')" class="mt-3 pt-2.5 border-t border-dashed border-rule flex justify-between text-[11px] text-ink-3 font-tabular">
               <span>前月 {{ fmt(deltaFor('income').prev) }}</span>
               <span>{{ fmtSigned(deltaFor('income').diff) }}</span>
             </div>
@@ -201,14 +208,14 @@ const NAV_ITEMS = [
           <div class="relative bg-surface border border-rule rounded-xl px-4 py-3.5">
             <h3 class="m-0 mb-1.5 text-[10px] tracking-[0.14em] uppercase text-ink-3 font-semibold">支出</h3>
             <span
-              v-if="deltaFor('expense').pct !== null"
+              v-if="deltaFor('expense') && deltaFor('expense').pct !== null"
               class="absolute top-3.5 right-3.5 font-mono text-[10px] px-1.5 py-[2px] rounded"
               :class="deltaFor('expense').diff <= 0 ? 'bg-pos-soft text-pos' : 'bg-neg-soft text-neg'"
             >{{ fmtPct(deltaFor('expense').pct) }}</span>
             <p class="m-0 text-[22px] font-semibold text-neg font-mono font-tabular tracking-tight leading-none">
               <span class="text-[13px] text-ink-3 font-medium mr-0.5">¥</span>{{ fmt(summary.total.expense) }}
             </p>
-            <div class="mt-3 pt-2.5 border-t border-dashed border-rule flex justify-between text-[11px] text-ink-3 font-tabular">
+            <div v-if="deltaFor('expense')" class="mt-3 pt-2.5 border-t border-dashed border-rule flex justify-between text-[11px] text-ink-3 font-tabular">
               <span>前月 {{ fmt(deltaFor('expense').prev) }}</span>
               <span>{{ fmtSigned(deltaFor('expense').diff) }}</span>
             </div>
@@ -226,7 +233,7 @@ const NAV_ITEMS = [
             >
               <span class="text-[13px] text-ink-3 font-medium mr-0.5">¥</span>{{ fmt(summary.total.balance) }}
             </p>
-            <div class="mt-3 pt-2.5 border-t border-dashed border-rule flex justify-between text-[11px] text-ink-3 font-tabular">
+            <div v-if="prevSummary" class="mt-3 pt-2.5 border-t border-dashed border-rule flex justify-between text-[11px] text-ink-3 font-tabular">
               <span>前月 {{ fmt(prevSummary.total.balance) }}</span>
               <span>{{ fmtSigned(summary.total.balance - prevSummary.total.balance) }}</span>
             </div>
