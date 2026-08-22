@@ -117,3 +117,43 @@ export async function updateFixedCostBatch(data) {
     if (!res.ok) throw new Error('Failed to batch update fixed cost');
     return res.json();
 }
+
+// 給与 (INCOME/700) は 1 会計月に複数明細を許容するため、update_cell とは別に
+// id ベースの CRUD を叩く。data: { year, month, amount, description? }
+export async function addSalaryEntry({ year, month, amount, description }) {
+    const res = await fetch(`${API_BASE}/fixed_costs/salary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year, month, amount, description }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to add salary entry');
+    }
+    return res.json();
+}
+
+// data: { amount, description? } — 会計月は変更不可 (月変更は削除+追加で対応)
+export async function updateSalaryEntry(id, { amount, description }) {
+    const res = await fetch(`${API_BASE}/fixed_costs/salary/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, description }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to update salary entry');
+    }
+    return res.json();
+}
+
+export async function deleteSalaryEntry(id) {
+    const res = await fetch(`${API_BASE}/fixed_costs/salary/${id}`, {
+        method: 'DELETE',
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to delete salary entry');
+    }
+    return res.json();
+}
