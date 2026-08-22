@@ -31,18 +31,29 @@ Gemini API (AI) を使用して、レシート画像やPDFから品目と金額�
 
 ### 扱うカテゴリ
 - **支出 (`type=EXPENSE`)**: `category_code` が `601`〜`608`（電気・水道・ガス・家賃・電話などの固定費・公共料金）と `901`（小遣い）。
-- **収入 (`type=INCOME`)**: `category_code=700`（給与）。現状は給与のみで、拡張時は `FixedCostManager.vue` の `INCOME_FIXED_CODES` に対象コードを追加します。
+- **収入 (`type=INCOME`)**: `category_code=700`（給与）。現状は給与のみで、拡張時は `FixedCostManager.vue` と `server/routes/fixed_costs.js` の双方に定義されている `INCOME_FIXED_CODES` に対象コードを追加します（既知の二重管理箇所）。
+
+### 給与セルの複数明細対応
+- 給与（`type=INCOME` / `category_code=700`）は 1 会計月に**複数明細**を持てます。他の固定費セルとは異なり、マトリクス上のセルは合計値の表示のみを行い、直接編集はできません。
+- 給与セルをクリックすると **給与明細モーダル (`SalaryDetailModal.vue`)** が開き、対象月の明細を追加・金額編集・摘要編集・削除できます。
+- 既存明細の削除は保存時に不可逆となるため、確認ダイアログを挟みます。未保存の変更があるままモーダルを閉じようとした場合は破棄確認ダイアログを表示します。
+- カテゴリ別合計・月別収入合計は、matrix 側の単一値と `salaryEntries` 側の複数明細の両方を合算して算出します。
 
 ### 保存レコードの仕様
 - 支出は現行踏襲で、`description` は「固定費入力」。
-- 収入（給与）は `description` を「給与(固定入力)」とし、`date` はその `fiscal_month` に必ず含まれる **前月 25 日** を格納します（例: `fiscal_month=2026-09` なら `date=2026-08-25`）。`getFiscalMonth(date)` と `fiscal_month` が整合する側の日付を採用しています。
+- 収入（給与）は `description` を「給与(固定入力)」（未指定時）とし、`date` はその `fiscal_month` に必ず含まれる **前月 25 日** を格納します（例: `fiscal_month=2026-09` なら `date=2026-08-25`）。`getFiscalMonth(date)` と `fiscal_month` が整合する側の日付を採用しています。日付決定はサーバー側 `resolveInsertDate` に集約されています。
 
 ### API
 - セル単体更新 `POST /api/fixed_costs/update_cell` と一括更新 `POST /api/fixed_costs/batch_update` は `type` 引数を受け取り、INCOME/EXPENSE を混在させて Upsert できます。`type` 省略時は `EXPENSE` として扱い、後方互換を保ちます。
+- ただし `type=INCOME` かつ `category_code` が `INCOME_FIXED_CODES` に含まれる場合（現状は給与 = 700）は、`(fiscal_month, category_code, type)` の一意化前提と両立しないため **HTTP 400** で拒否します。給与の書き込みは以下の給与専用エンドポイントを利用してください。
+- `POST /api/fixed_costs/salary`: 給与明細を 1 件追加。body は `{ year, month, amount, description? }`。`date` は `resolveInsertDate` により「前月 25 日」に固定されます。
+- `PUT /api/fixed_costs/salary/:id`: 給与明細の `amount` と `description` を更新。`date` / `fiscal_month` は保持され、月の付け替えは削除＋追加で行う想定です。対象が給与行でなければ 404。
+- `DELETE /api/fixed_costs/salary/:id`: 給与明細を削除。対象が給与行でなければ 404。
 
 ### Excelペースト機能
 - Excelからコピーしたデータを、画面上の任意のセルで `Ctrl+V` (Cmd+V) することで貼り付け可能です。
 - クリップボードのTSVデータを解析し、セル位置を起点として右・下方向にデータを一括更新します (`/api/fixed_costs/batch_update`)。
+- 貼り付け範囲は「収入」「支出」いずれかのセクション内に限定されます。**給与列（`category_code=700`）は v1 では skip** し、貼り付けの上書き対象外です。給与の一括入力はモーダルから明細を追加してください。
 
 ## 4. データ管理: エクスポート・バックアップ (`ExcelImport.vue`, `backup.js`)
 データの保全と外部連携のための機能群です。

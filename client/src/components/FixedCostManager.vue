@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, watch, computed } from 'vue'
 import { fetchCategories, fetchFixedCostMatrix, updateFixedCostCell, updateFixedCostBatch } from '../api'
+import SalaryDetailModal from './SalaryDetailModal.vue'
 
 const year = ref(new Date().getFullYear())
 const availableYears = computed(() => {
@@ -16,12 +17,19 @@ const availableYears = computed(() => {
 })
 const expenseCategories = ref([])
 const incomeCategories = ref([])
-const matrix = ref({}) // { '01': { 601: 5000, 604: 80000, 700: 300000 }, ... }
+const matrix = ref({}) // { '01': { 601: 5000, 604: 80000 }, ... } — 給与 (700) は含めない
+// 給与 (INCOME/700) のみ 1 会計月に複数明細を許容するため専用の state に持たせる。
+// { '01': [{ id, amount, description }, ...], ... }
+const salaryEntries = ref({})
 const months = Array.from({length: 12}, (_, i) => String(i + 1).padStart(2, '0'))
 
 // Target categories (Fixed input specific)
 const EXPENSE_FIXED_CODES = [604, 601, 603, 606, 602, 605, 607, 901, 608]
-const INCOME_FIXED_CODES = [700]
+const SALARY_CATEGORY_CODE = 700
+const INCOME_FIXED_CODES = [SALARY_CATEGORY_CODE]
+
+// 給与カテゴリ判定 (今後 INCOME_FIXED_CODES に複数明細対応コードが増えても分岐を統一)
+const isSalaryCode = (code) => Number(code) === SALARY_CATEGORY_CODE
 
 const loadData = async () => {
     try {
@@ -38,15 +46,34 @@ const loadData = async () => {
 
         // Transform to matrix
         const map = {}
-        months.forEach(m => map[m] = {})
+        const salaryMap = {}
+        months.forEach(m => {
+            map[m] = {}
+            salaryMap[m] = []
+        })
 
         res.data.forEach(item => {
             const m = item.fiscal_month.split('-')[1]
-            if (map[m]) {
+            if (!map[m]) return
+            // 給与 (INCOME/700) は複数明細対応: matrix には書き込まず salaryEntries に push
+            if (item.type === 'INCOME' && INCOME_FIXED_CODES.includes(Number(item.category_code))) {
+                salaryMap[m].push({
+                    id: item.id,
+                    amount: Number(item.amount) || 0,
+                    description: item.description || '',
+                })
+            } else {
                 map[m][item.category_code] = item.amount
             }
         })
+
+        // 表示順一貫性のため id 昇順で並べる
+        months.forEach(m => {
+            salaryMap[m].sort((a, b) => a.id - b.id)
+        })
+
         matrix.value = map
+        salaryEntries.value = salaryMap
     } catch(e) {
         console.error(e)
     }
@@ -138,6 +165,10 @@ const handlePaste = async (startMonth, startCode, type, sectionCategories, event
 
                 const targetCode = sectionCategories[catIndex].code
 
+                // 給与 (INCOME/700) は複数明細対応のためモーダル経由でのみ編集可能。
+                // 貼り付けでは触らず、他列は既存通り上書きする。
+                if (type === 'INCOME' && isSalaryCode(targetCode)) return
+
                 // Clean input (remove commas, yen sign etc)
                 const amount = cellRaw.replace(/[^0-9]/g, '')
 
@@ -169,6 +200,17 @@ const handlePaste = async (startMonth, startCode, type, sectionCategories, event
 
 
 const getCategoryTotal = (code) => {
+    // 給与は matrix 上に存在しないため salaryEntries から集計
+    if (isSalaryCode(code)) {
+        let sum = 0
+        months.forEach(m => {
+            const list = salaryEntries.value[m]
+            if (list) {
+                for (const e of list) sum += Number(e.amount) || 0
+            }
+        })
+        return sum
+    }
     let sum = 0
     months.forEach(m => {
         if (matrix.value[m]) {
@@ -176,6 +218,17 @@ const getCategoryTotal = (code) => {
         }
     })
     return sum
+}
+
+// 特定月の給与合計 / 件数 (セル UI から使う)
+const getSalaryMonthTotal = (month) => {
+    const list = salaryEntries.value[month]
+    if (!list) return 0
+    return list.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+}
+const getSalaryMonthCount = (month) => {
+    const list = salaryEntries.value[month]
+    return list ? list.length : 0
 }
 
 // 月別 (収入/支出/差引) と年計を 1 周でまとめて算出。テンプレート側は summary.* を参照する。
@@ -189,8 +242,18 @@ const summary = computed(() => {
     months.forEach((m, i) => {
         const row = matrix.value[m]
         if (row) {
-            for (const code of INCOME_FIXED_CODES) income[i] += Number(row[code]) || 0
+            // 将来 700 以外の INCOME 単一値が追加される場合を想定し、
+            // matrix (単一値) 分と salaryEntries (複数明細) 分の両方を加算する。
+            for (const code of INCOME_FIXED_CODES) {
+                if (isSalaryCode(code)) continue
+                income[i] += Number(row[code]) || 0
+            }
             for (const code of EXPENSE_FIXED_CODES) expense[i] += Number(row[code]) || 0
+        }
+        // 給与 (複数明細) 分を加算
+        const salaryList = salaryEntries.value[m]
+        if (salaryList) {
+            for (const e of salaryList) income[i] += Number(e.amount) || 0
         }
         net[i] = income[i] - expense[i]
         incomeYear += income[i]
@@ -206,6 +269,37 @@ const summary = computed(() => {
         netYear: incomeYear - expenseYear,
     }
 })
+
+// ---------------------------------------------------------------------------
+// 給与明細モーダル state
+// ---------------------------------------------------------------------------
+const salaryModal = ref({
+    open: false,
+    month: '01',
+    categoryName: '',
+})
+
+const openSalaryModal = (month, categoryName) => {
+    salaryModal.value = {
+        open: true,
+        month,
+        categoryName,
+    }
+}
+
+const closeSalaryModal = () => {
+    salaryModal.value.open = false
+}
+
+const onSalarySaved = (updatedEntries) => {
+    const m = salaryModal.value.month
+    // 親側の state を丸ごと差し替え (id 昇順で入ってくる想定だが念のためソート)
+    const sorted = [...updatedEntries].sort((a, b) => a.id - b.id)
+    salaryEntries.value = {
+        ...salaryEntries.value,
+        [m]: sorted,
+    }
+}
 </script>
 
 <template>
@@ -242,20 +336,35 @@ const summary = computed(() => {
                         <tr v-for="m in months" :key="m" class="hover:bg-gray-50">
                             <td class="p-2 border font-bold text-center sticky left-0 bg-gray-50 z-10">{{ Number(m) }}月</td>
                             <td v-for="cat in incomeCategories" :key="cat.code" class="p-0 border relative group">
-                                <input
-                                    type="text"
-                                    inputmode="numeric"
-                                    :value="formatAmount(matrix[m]?.[cat.code])"
-                                    @focus="onFocus(m, cat.code, $event)"
-                                    @blur="onBlur(m, cat.code, 'INCOME', $event)"
-                                    @paste="handlePaste(m, cat.code, 'INCOME', incomeCategories, $event)"
-                                    @keydown.enter="$event.target.blur()"
-                                    placeholder="-"
-                                    class="w-full h-full p-2 text-right focus:bg-blue-50 focus:outline-none bg-transparent transition"
-                                />
-                                <div class="hidden group-hover:block absolute -top-8 left-0 bg-black text-white text-xs p-1 rounded whitespace-nowrap z-20">
-                                    {{ Number(m) }}月 - {{ cat.name }}
-                                </div>
+                                <!-- 給与セル: 複数明細のためモーダル起動ボタン (1 行で合計 + 件数を表示) -->
+                                <template v-if="isSalaryCode(cat.code)">
+                                    <button
+                                        type="button"
+                                        @click="openSalaryModal(m, cat.name)"
+                                        class="w-full h-full p-2 text-right hover:bg-blue-50 focus:bg-blue-50 focus:outline-none font-mono transition"
+                                    >
+                                        {{ getSalaryMonthTotal(m) > 0 ? `¥${getSalaryMonthTotal(m).toLocaleString()} (${getSalaryMonthCount(m)}件)` : '-' }}
+                                    </button>
+                                    <div class="hidden group-hover:block absolute -top-8 left-0 bg-black text-white text-xs p-1 rounded whitespace-nowrap z-20">
+                                        {{ Number(m) }}月 - {{ cat.name }} 明細を編集
+                                    </div>
+                                </template>
+                                <template v-else>
+                                    <input
+                                        type="text"
+                                        inputmode="numeric"
+                                        :value="formatAmount(matrix[m]?.[cat.code])"
+                                        @focus="onFocus(m, cat.code, $event)"
+                                        @blur="onBlur(m, cat.code, 'INCOME', $event)"
+                                        @paste="handlePaste(m, cat.code, 'INCOME', incomeCategories, $event)"
+                                        @keydown.enter="$event.target.blur()"
+                                        placeholder="-"
+                                        class="w-full h-full p-2 text-right focus:bg-blue-50 focus:outline-none bg-transparent transition"
+                                    />
+                                    <div class="hidden group-hover:block absolute -top-8 left-0 bg-black text-white text-xs p-1 rounded whitespace-nowrap z-20">
+                                        {{ Number(m) }}月 - {{ cat.name }}
+                                    </div>
+                                </template>
                             </td>
                             <td class="p-2 border text-right font-mono font-bold bg-green-50 text-gray-700">
                                 ¥{{ summary.income[Number(m) - 1].toLocaleString() }}
@@ -380,7 +489,19 @@ const summary = computed(() => {
 
     <div class="mt-2 text-right text-xs text-gray-500">
         ※ 金額を入力してフォーカスを外すと自動保存されます。保存中: {{ saving ? '...' : '完了' }} <br>
-        ※ Excel等からコピー＆ペースト（複数セル）も可能です。貼り付けはセクション内 (収入 / 支出) の範囲に限られます。
+        ※ Excel等からコピー＆ペースト（複数セル）も可能です。貼り付けはセクション内 (収入 / 支出) の範囲に限られます。<br>
+        ※ 給与セルは複数明細に対応しています。セルをクリックすると明細モーダルが開きます。
     </div>
+
+    <!-- 給与明細モーダル (複数明細 CRUD) -->
+    <SalaryDetailModal
+        v-if="salaryModal.open"
+        :year="year"
+        :month="salaryModal.month"
+        :category-name="salaryModal.categoryName"
+        :entries="salaryEntries[salaryModal.month] || []"
+        @close="closeSalaryModal"
+        @saved="onSalarySaved"
+    />
   </div>
 </template>
