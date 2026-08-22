@@ -1,7 +1,7 @@
 <script setup>
 import { Doughnut } from 'vue-chartjs'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
-import { computed } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { getCategoryPaletteKeyByName, getCategoryColor } from '../utils'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
@@ -11,19 +11,35 @@ const props = defineProps({
   total: { type: Number, default: 0 },
 })
 
+// ダーク切替に追従して色を再計算するためのバンプカウンタ。
+// html.dark クラスの変化を MutationObserver で検知して更新。
+const themeBump = ref(0)
+let observer = null
+onMounted(() => {
+  observer = new MutationObserver(() => { themeBump.value++ })
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+})
+onBeforeUnmount(() => observer?.disconnect())
+
 const positiveData = computed(() => props.data.filter(d => d.total > 0))
 const nonPositiveData = computed(() => props.data.filter(d => d.total <= 0))
 
-const enriched = computed(() =>
-  positiveData.value.map(d => {
+const enriched = computed(() => {
+  themeBump.value // eslint-disable-line no-unused-expressions
+  return positiveData.value.map(d => {
     const key = getCategoryPaletteKeyByName(d.group_name)
     return { ...d, paletteKey: key, color: getCategoryColor(key) }
   })
-)
+})
 
 const displayTotal = computed(() => {
   if (props.total && props.total > 0) return props.total
   return enriched.value.reduce((s, d) => s + d.total, 0)
+})
+
+const surfaceColor = computed(() => {
+  themeBump.value // eslint-disable-line no-unused-expressions
+  return getComputedStyle(document.documentElement).getPropertyValue('--color-surface').trim() || '#ffffff'
 })
 
 const chartData = computed(() => ({
@@ -31,7 +47,7 @@ const chartData = computed(() => ({
   datasets: [
     {
       backgroundColor: enriched.value.map(d => d.color),
-      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--color-surface').trim() || '#ffffff',
+      borderColor: surfaceColor.value,
       borderWidth: 2,
       data: enriched.value.map(d => d.total),
     },

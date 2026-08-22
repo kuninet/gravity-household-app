@@ -110,3 +110,26 @@ body {
 .animate-fade-in {
   animation: fadeIn 0.5s ease-out;
 }
+
+/* ダーク時セーフティネット --------------------------------------------------
+   ダッシュボード以外のビュー (年次分析 / 複数年 / 固定入力 / 取込) は
+   Tailwind の bg-white / text-gray-* / bg-gray-* を多用しており、
+   本 Epic のスコープ外だが、ダーク時に読めなくなるのを避けるためだけの
+   最小限のオーバーライド。個別ページの本格リファインは別 Epic で扱う。
+   ------------------------------------------------------------------------- */
+.dark .bg-white { background-color: var(--color-surface); }
+.dark .bg-gray-100 { background-color: var(--color-surface-2); }
+.dark .bg-gray-50 { background-color: var(--color-surface-2); }
+.dark .bg-gray-200 { background-color: var(--color-rule); }
+.dark .text-gray-800 { color: var(--color-ink); }
+.dark .text-gray-700 { color: var(--color-ink); }
+.dark .text-gray-600 { color: var(--color-ink-2); }
+.dark .text-gray-500 { color: var(--color-ink-2); }
+.dark .text-gray-400 { color: var(--color-ink-3); }
+.dark .text-gray-300 { color: var(--color-ink-3); }
+.dark .border-gray-200 { border-color: var(--color-rule); }
+.dark .border-gray-300 { border-color: var(--color-rule); }
+.dark .bg-blue-50 { background-color: var(--color-accent-soft); }
+.dark .bg-green-50 { background-color: var(--color-pos-soft); }
+.dark .bg-red-50 { background-color: var(--color-neg-soft); }
+.dark .bg-yellow-50 { background-color: var(--color-cat-util-soft); }
