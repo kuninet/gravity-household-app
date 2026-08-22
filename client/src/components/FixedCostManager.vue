@@ -167,7 +167,7 @@ const handlePaste = async (startMonth, startCode, type, sectionCategories, event
 
                 // 給与 (INCOME/700) は複数明細対応のためモーダル経由でのみ編集可能。
                 // 貼り付けでは触らず、他列は既存通り上書きする。
-                if (type === 'INCOME' && INCOME_FIXED_CODES.includes(targetCode)) return
+                if (type === 'INCOME' && isSalaryCode(targetCode)) return
 
                 // Clean input (remove commas, yen sign etc)
                 const amount = cellRaw.replace(/[^0-9]/g, '')
@@ -336,24 +336,14 @@ const onSalarySaved = (updatedEntries) => {
                         <tr v-for="m in months" :key="m" class="hover:bg-gray-50">
                             <td class="p-2 border font-bold text-center sticky left-0 bg-gray-50 z-10">{{ Number(m) }}月</td>
                             <td v-for="cat in incomeCategories" :key="cat.code" class="p-0 border relative group">
-                                <!-- 給与セル: 複数明細のためモーダル起動ボタン (合計 + 件数) -->
+                                <!-- 給与セル: 複数明細のためモーダル起動ボタン (1 行で合計 + 件数を表示) -->
                                 <template v-if="isSalaryCode(cat.code)">
                                     <button
                                         type="button"
                                         @click="openSalaryModal(m, cat.name)"
-                                        class="w-full h-full p-2 text-right hover:bg-blue-50 focus:bg-blue-50 focus:outline-none transition flex flex-col items-end justify-center"
+                                        class="w-full h-full p-2 text-right hover:bg-blue-50 focus:bg-blue-50 focus:outline-none font-mono transition"
                                     >
-                                        <span class="font-mono">
-                                            <template v-if="getSalaryMonthCount(m) > 0">
-                                                ¥{{ getSalaryMonthTotal(m).toLocaleString() }}
-                                            </template>
-                                            <template v-else>
-                                                <span class="text-gray-400">＋</span>
-                                            </template>
-                                        </span>
-                                        <span v-if="getSalaryMonthCount(m) > 0" class="text-[10px] text-gray-500 leading-none mt-0.5">
-                                            {{ getSalaryMonthCount(m) }} 件
-                                        </span>
+                                        {{ getSalaryMonthTotal(m) > 0 ? `¥${getSalaryMonthTotal(m).toLocaleString()} (${getSalaryMonthCount(m)}件)` : '-' }}
                                     </button>
                                     <div class="hidden group-hover:block absolute -top-8 left-0 bg-black text-white text-xs p-1 rounded whitespace-nowrap z-20">
                                         {{ Number(m) }}月 - {{ cat.name }} 明細を編集

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { addSalaryEntry, updateSalaryEntry, deleteSalaryEntry } from '../api'
 
 const props = defineProps({
@@ -14,6 +14,9 @@ const props = defineProps({
 const emit = defineEmits(['close', 'saved'])
 
 const DEFAULT_DESCRIPTION = '給与(固定入力)'
+
+// モーダル本体の ref。追加行への autofocus 時に amount input を探すのに使う。
+const modalBody = ref(null)
 
 // 内部編集用ドラフト。親側の配列を変更しないよう deep copy し、行毎に編集メタを持たせる。
 // _new: この UI 内で追加した行 (id === null)
@@ -41,7 +44,7 @@ const totalAmount = computed(() =>
 
 const monthLabel = computed(() => Number(props.month))
 
-const addRow = () => {
+const addRow = async () => {
     draft.value.push({
         id: null,
         amount: '',
@@ -50,6 +53,13 @@ const addRow = () => {
         _dirty: false,
         _deleted: false,
     })
+    // 追加行 (末尾) の amount input にフォーカスを飛ばす
+    await nextTick()
+    if (modalBody.value) {
+        const inputs = modalBody.value.querySelectorAll('input[data-role="salary-amount"]')
+        const last = inputs[inputs.length - 1]
+        if (last) last.focus()
+    }
 }
 
 const removeRow = (row) => {
@@ -58,8 +68,15 @@ const removeRow = (row) => {
         const idx = draft.value.indexOf(row)
         if (idx !== -1) draft.value.splice(idx, 1)
     } else {
+        // 既存行は削除に確認を挟む (保存時点で不可逆になるため)
+        if (!window.confirm('この明細を削除しますか？（保存すると元に戻せません）')) return
         row._deleted = true
     }
+}
+
+// draft に「未保存」変更が 1 件でもあるか判定 (close 時の確認に使う)
+const hasUnsavedChanges = () => {
+    return draft.value.some((r) => r._new || r._dirty || r._deleted)
 }
 
 const onAmountInput = (row, event) => {
@@ -76,6 +93,9 @@ const onDescriptionInput = (row) => {
 
 const close = () => {
     if (saving.value) return
+    if (hasUnsavedChanges()) {
+        if (!window.confirm('未保存の変更があります。破棄しますか？')) return
+    }
     emit('close')
 }
 
@@ -108,26 +128,24 @@ const validateBeforeSave = () => {
     return true
 }
 
-const normalizedDescription = (desc) => {
-    const s = (desc ?? '').toString().trim()
-    return s === '' ? DEFAULT_DESCRIPTION : s
-}
-
 const onSave = async () => {
     if (saving.value) return
     if (!validateBeforeSave()) return
 
     saving.value = true
-    // 成功済みの反映を後段で emit するため、途中経過を trace する
+    // 途中経過の失敗を集約する。1 件でもあれば emit を抑止してモーダルを開いたままにする。
     const errors = []
+    // 削除に成功した行は draft から取り除くために index を集める
+    const deletedIndexes = []
 
     try {
         // 1) 既存行の削除 (id あり、削除マーク、新規ではない)
-        for (const row of draft.value) {
+        for (let i = 0; i < draft.value.length; i++) {
+            const row = draft.value[i]
             if (!(row._deleted && !row._new && row.id)) continue
             try {
                 await deleteSalaryEntry(row.id)
-                row._deletedApplied = true
+                deletedIndexes.push(i)
             } catch (e) {
                 console.error('deleteSalaryEntry failed', e)
                 errors.push(`削除 (id=${row.id}) に失敗しました: ${e.message}`)
@@ -138,12 +156,11 @@ const onSave = async () => {
         for (const row of draft.value) {
             if (!(row._dirty && !row._new && !row._deleted && row.id)) continue
             try {
-                const desc = normalizedDescription(row.description)
+                // description の空欄はサーバー側 normalizeSalaryDescription にフォールバックさせる
                 await updateSalaryEntry(row.id, {
                     amount: Number(row.amount),
-                    description: desc,
+                    description: row.description ?? '',
                 })
-                row.description = desc
                 row._dirty = false
             } catch (e) {
                 console.error('updateSalaryEntry failed', e)
@@ -155,15 +172,13 @@ const onSave = async () => {
         for (const row of draft.value) {
             if (!(row._new && !row._deleted)) continue
             try {
-                const desc = normalizedDescription(row.description)
                 const result = await addSalaryEntry({
                     year: props.year,
                     month: Number(props.month),
                     amount: Number(row.amount),
-                    description: desc,
+                    description: row.description ?? '',
                 })
                 row.id = result.id
-                row.description = desc
                 row._new = false
                 row._dirty = false
             } catch (e) {
@@ -172,9 +187,23 @@ const onSave = async () => {
             }
         }
 
-        // 成功した行だけを最新スナップショットとして親に返す
+        // 削除に成功した行を draft から取り除く (後ろから splice すれば index が崩れない)
+        for (let i = deletedIndexes.length - 1; i >= 0; i--) {
+            draft.value.splice(deletedIndexes[i], 1)
+        }
+
+        if (errors.length > 0) {
+            // 部分失敗: state 不整合を親に流さないため emit せず、モーダルを開いたままにする
+            alert(
+                `${errors.length} 件の操作が失敗しました。もう一度保存してください。\n\n` +
+                errors.join('\n')
+            )
+            return
+        }
+
+        // 全件成功: 最新スナップショットを親に返して閉じる
         const updatedEntries = draft.value
-            .filter((row) => row.id && !(row._deleted && row._deletedApplied) && !row._deleted)
+            .filter((row) => row.id && !row._deleted)
             .map((row) => ({
                 id: row.id,
                 amount: Number(row.amount),
@@ -182,14 +211,8 @@ const onSave = async () => {
             }))
             .sort((a, b) => a.id - b.id)
 
-        if (errors.length > 0) {
-            alert(`一部の保存に失敗しました:\n${errors.join('\n')}`)
-            // 成功済みの反映は親側にも共有する (整合を取るため)
-            emit('saved', updatedEntries)
-        } else {
-            emit('saved', updatedEntries)
-            emit('close')
-        }
+        emit('saved', updatedEntries)
+        emit('close')
     } finally {
         saving.value = false
     }
@@ -200,10 +223,13 @@ const onSave = async () => {
   <div
     class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50"
     @click="onBackdropClick"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="salary-modal-title"
   >
-    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 mx-4">
+    <div ref="modalBody" class="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 mx-4">
         <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-bold text-gray-700">
+            <h3 id="salary-modal-title" class="text-lg font-bold text-gray-700">
                 {{ year }}年 {{ monthLabel }}月 {{ categoryName }}明細
             </h3>
             <button
@@ -236,6 +262,7 @@ const onSave = async () => {
                                 :value="row.amount === '' || row.amount == null ? '' : String(row.amount)"
                                 @input="onAmountInput(row, $event)"
                                 placeholder="0"
+                                data-role="salary-amount"
                                 class="w-full border rounded p-2 text-right font-mono"
                             />
                         </td>
