@@ -89,7 +89,7 @@ const changeMonth = (offset) => {
 <template>
   <div class="min-h-screen bg-gray-100 text-gray-800 font-sans">
     <header class="bg-blue-600 text-white shadow sticky top-0 z-50">
-        <div class="container mx-auto p-4">
+        <div class="max-w-screen-2xl mx-auto p-4">
             <div class="flex flex-col md:flex-row justify-between items-center gap-4">
                 <h1 class="text-2xl font-bold flex items-center gap-2">
                     <span>家計簿アプリ Gravity</span>
@@ -141,23 +141,23 @@ const changeMonth = (offset) => {
         </div>
     </header>
 
-    <main class="container mx-auto p-4">
+    <main class="max-w-screen-2xl mx-auto p-4">
         <!-- Dashboard View -->
         <div v-if="currentView === 'dashboard'" class="animate-fade-in">
             <!-- Summary Cards -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <!-- Summary Cards -->
-                <div class="bg-white p-4 rounded shadow">
-                    <h3 class="text-sm text-gray-500">収入</h3>
-                    <p class="text-2xl font-bold text-green-600">¥{{ summary.total.income.toLocaleString() }}</p>
+                <div class="bg-white px-4 py-2 rounded shadow">
+                    <h3 class="text-xs text-gray-500 mb-0.5 leading-tight">収入</h3>
+                    <p class="text-2xl font-bold text-green-600 leading-tight">¥{{ summary.total.income.toLocaleString() }}</p>
                 </div>
-                <div class="bg-white p-4 rounded shadow">
-                    <h3 class="text-sm text-gray-500">支出</h3>
-                    <p class="text-2xl font-bold text-red-600">¥{{ summary.total.expense.toLocaleString() }}</p>
+                <div class="bg-white px-4 py-2 rounded shadow">
+                    <h3 class="text-xs text-gray-500 mb-0.5 leading-tight">支出</h3>
+                    <p class="text-2xl font-bold text-red-600 leading-tight">¥{{ summary.total.expense.toLocaleString() }}</p>
                 </div>
-                <div class="bg-white p-4 rounded shadow">
-                    <h3 class="text-sm text-gray-500">収支差</h3>
-                    <p class="text-2xl font-bold" :class="summary.total.balance >= 0 ? 'text-black' : 'text-red-600'">
+                <div class="bg-white px-4 py-2 rounded shadow">
+                    <h3 class="text-xs text-gray-500 mb-0.5 leading-tight">収支差</h3>
+                    <p class="text-2xl font-bold leading-tight" :class="summary.total.balance >= 0 ? 'text-black' : 'text-red-600'">
                         ¥{{ summary.total.balance.toLocaleString() }}
                     </p>
                 </div>

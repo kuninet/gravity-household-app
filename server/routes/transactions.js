@@ -31,7 +31,7 @@ router.get('/', (req, res) => {
         const placeholders = FIXED_COST_CODES.map(() => '?').join(',');
         sql += ` WHERE category_code NOT IN (${placeholders})`;
         params.push(...FIXED_COST_CODES);
-        sql += ' ORDER BY id DESC LIMIT 10';
+        sql += ' ORDER BY id DESC LIMIT 6';
     } else {
         if (month) {
             sql += ' WHERE fiscal_month = ?';
