@@ -298,8 +298,11 @@ const onReceiptPrefill = (payload) => {
       </div>
 
       <!-- Receipt Check View -->
+      <!-- 「登録する」で日々の記録へ移った後も選択ファイルと照合結果を保持する -->
       <div v-else-if="currentView === 'receipt_check'" class="animate-fade-in">
-        <ReceiptCheck @prefill="onReceiptPrefill" />
+        <KeepAlive>
+          <ReceiptCheck @prefill="onReceiptPrefill" />
+        </KeepAlive>
       </div>
     </main>
   </div>

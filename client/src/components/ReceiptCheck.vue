@@ -60,6 +60,7 @@ const runCheck = async () => {
         const data = await checkReceipts({ fileNames, month: selectedMonth.value })
         result.value = data
     } catch (e) {
+        result.value = null
         errorMessage.value = e.message || '照合に失敗しました。'
     } finally {
         isLoading.value = false
