@@ -34,6 +34,7 @@ PR のタイトル・本文、Issue、コミットメッセージ、AGENTS.md、
 - `server/app.js`: Express アプリと API ルート登録
 - `server/db.js`: SQLite 接続と基本スキーマ作成
 - `server/routes/`: API エンドポイント群
+- `server/lib/`: レシート照合ロジック（`receiptMatcher.js`）。`scripts/check-receipts.js`（CLI）と `server/routes/receipts.js`（API）が共有する
 - `tests/e2e/`: Playwright E2E テスト
 
 ## 重要な仕様

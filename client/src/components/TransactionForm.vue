@@ -5,7 +5,12 @@ import ReceiptSplitter from './ReceiptSplitter.vue'
 import ReceiptOCR from './ReceiptOCR.vue'
 
 // Props to notify parent of updates
-const emit = defineEmits(['transaction-added'])
+const props = defineProps({
+  // レシート照合タブの「登録する」から渡される { date, memo, nonce }。
+  // nonce は同じ日付・店名を続けて登録するときにも watch が発火するようにするための目印。
+  prefill: { type: Object, default: null }
+})
+const emit = defineEmits(['transaction-added', 'prefill-applied'])
 
 // State
 const categories = ref([])
@@ -31,6 +36,17 @@ const splitterState = ref({
 
 // Watch for category change to auto-select type
 import { watch } from 'vue'
+
+// レシート照合タブからの遷移: 日付・店名（memo）だけをフォームに反映する。
+// 他の入力（費目・金額など）には触れない。適用後は 'prefill-applied' を通知し、
+// 親側で prefill を null に戻してもらうことで、タブを行き来しても再適用されないようにする。
+watch(() => props.prefill, (value) => {
+    if (!value) return
+    if (value.date) form.value.date = value.date
+    if (value.memo) form.value.memo = value.memo
+    emit('prefill-applied')
+}, { immediate: true })
+
 watch(() => form.value.category_code, (newCode) => {
     if (!newCode) return
     const code = Number(newCode)
