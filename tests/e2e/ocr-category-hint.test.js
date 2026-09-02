@@ -103,6 +103,91 @@ test.describe('OCR: 店名・明細ヒントからのデフォルト費目推定
     await expect(rows.nth(1).locator('select').first()).toHaveValue('200');
   });
 
+  test('飲食店のレシート: 酒類 (alcohol) は外食費 (103) に振り分けられる', async ({ page }) => {
+    await stubOcrModels(page);
+    await page.route('**/api/ocr/analyze', async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          store: '居酒屋 花',
+          store_category_hint: 'restaurant',
+          date: new Date().toISOString().slice(0, 10),
+          items: [
+            { description: '生ビール', amount: 600, category_hint: 'alcohol' },
+            { description: '唐揚げ', amount: 500, category_hint: 'dining_out' },
+            { description: 'お通し', amount: 300 }
+          ]
+        })
+      });
+    });
+
+    await openDashboard(page);
+    const { modal } = await openOcrModalWithFile(page);
+    const rows = modal.locator('tbody tr');
+    await expect(rows.nth(0).locator('select').first()).toHaveValue('103');
+    await expect(rows.nth(1).locator('select').first()).toHaveValue('103');
+    await expect(rows.nth(2).locator('select').first()).toHaveValue('103');
+  });
+
+  test('スーパーのレシート: 酒類 (alcohol) は従来どおり酒 (105) のまま', async ({ page }) => {
+    await stubOcrModels(page);
+    await page.route('**/api/ocr/analyze', async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          store: 'ライフ',
+          store_category_hint: 'grocery',
+          date: new Date().toISOString().slice(0, 10),
+          items: [
+            { description: '缶ビール', amount: 250, category_hint: 'alcohol' },
+            { description: '牛乳', amount: 200, category_hint: 'food' }
+          ]
+        })
+      });
+    });
+
+    await openDashboard(page);
+    const { modal } = await openOcrModalWithFile(page);
+    const rows = modal.locator('tbody tr');
+    await expect(rows.nth(0).locator('select').first()).toHaveValue('105');
+    await expect(rows.nth(1).locator('select').first()).toHaveValue('100');
+  });
+
+  test('飲食店の税抜レシート: 酒類は外食費(103)かつ10%課税、料理は8%', async ({ page }) => {
+    await stubOcrModels(page);
+    await page.route('**/api/ocr/analyze', async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          store: '居酒屋 花',
+          store_category_hint: 'restaurant',
+          tax_included: 'excluded',
+          date: new Date().toISOString().slice(0, 10),
+          items: [
+            { description: '生ビール', amount: 600, category_hint: 'alcohol' },
+            { description: '唐揚げ', amount: 500, category_hint: 'dining_out' }
+          ]
+        })
+      });
+    });
+
+    await openDashboard(page);
+    const { modal } = await openOcrModalWithFile(page);
+    const rows = modal.locator('tbody tr');
+
+    // 費目は両方とも外食費 (103)
+    await expect(rows.nth(0).locator('select').first()).toHaveValue('103');
+    await expect(rows.nth(1).locator('select').first()).toHaveValue('103');
+
+    // 生ビール(酒類, 10%): 600*1.10=660 / 唐揚げ(食費8%): 500*1.08=540 → 合計1200
+    await expect(modal.getByText(/合計:\s*1,?200/)).toBeVisible();
+
+    // 生ビールの費目を手動で食費(100)に変更すると酒類フラグが落ち、8%に切り替わる
+    // (600*1.08=648 + 540 = 1188)
+    await rows.nth(0).locator('select').first().selectOption('100');
+    await expect(modal.getByText(/合計:\s*1,?188/)).toBeVisible();
+  });
+
   test('ヒントが一切無い旧レスポンスでも食費 (100) にフォールバックしエラーにならない', async ({ page }) => {
     await stubOcrModels(page);
     await page.route('**/api/ocr/analyze', async (route) => {
