@@ -10,12 +10,14 @@ import YearlyAnalysis from './components/YearlyAnalysis.vue'
 import MultiYearAnalysis from './components/MultiYearAnalysis.vue'
 import FixedCostManager from './components/FixedCostManager.vue'
 import ExcelImport from './components/ExcelImport.vue'
+import ReceiptCheck from './components/ReceiptCheck.vue'
 
-const currentView = ref('dashboard') // 'dashboard' | 'analysis' | 'multi_year_analysis' | 'fixed_costs' | 'import'
+const currentView = ref('dashboard') // 'dashboard' | 'analysis' | 'multi_year_analysis' | 'fixed_costs' | 'import' | 'receipt_check'
 const transactions = ref([])
 const categories = ref([])
 const summary = ref({ total: { income: 0, expense: 0, balance: 0 }, by_category: [], comparison: [] })
 const prevSummary = ref(null)
+const transactionPrefill = ref(null)
 
 const currentMonth = ref(getFiscalMonth(new Date()))
 const isDark = ref(document.documentElement.classList.contains('dark'))
@@ -124,7 +126,16 @@ const NAV_ITEMS = [
     { key: 'multi_year_analysis', label: '複数年比較' },
     { key: 'fixed_costs', label: '固定入力' },
     { key: 'import', label: 'データ管理' },
+    { key: 'receipt_check', label: 'レシート照合' },
 ]
+
+// レシート照合タブの「登録する」から呼ばれる。対象会計月・日々の記録へ切り替えたうえで
+// 取引登録フォームに日付・店名を差し込む。
+const onReceiptPrefill = (payload) => {
+    currentView.value = 'dashboard'
+    currentMonth.value = getFiscalMonth(new Date(payload.date))
+    transactionPrefill.value = { ...payload, nonce: Date.now() }
+}
 </script>
 
 <template>
@@ -250,7 +261,7 @@ const NAV_ITEMS = [
 
           <!-- Transaction Form (左 3 列) -->
           <div class="md:col-span-3">
-            <TransactionForm @transaction-added="loadData" />
+            <TransactionForm :prefill="transactionPrefill" @transaction-added="loadData" @prefill-applied="transactionPrefill = null" />
           </div>
         </div>
 
@@ -284,6 +295,11 @@ const NAV_ITEMS = [
       <!-- Import View -->
       <div v-else-if="currentView === 'import'">
         <ExcelImport />
+      </div>
+
+      <!-- Receipt Check View -->
+      <div v-else-if="currentView === 'receipt_check'" class="animate-fade-in">
+        <ReceiptCheck @prefill="onReceiptPrefill" />
       </div>
     </main>
   </div>

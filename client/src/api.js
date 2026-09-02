@@ -157,3 +157,18 @@ export async function deleteSalaryEntry(id) {
     }
     return res.json();
 }
+
+// レシート照合。fileNames はファイル名のみ（画像本体は送信しない）。
+// month 省略時はファイル名の日付範囲から自動判定される。
+export async function checkReceipts({ fileNames, month }) {
+    const res = await fetch(`${API_BASE}/receipts/check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileNames, month: month || undefined }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'レシートの照合に失敗しました');
+    }
+    return res.json();
+}
