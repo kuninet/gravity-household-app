@@ -56,7 +56,13 @@ if defined LOCAL_CHANGES (
     exit /b 1
 )
 
+set BEFORE=
 for /f "delims=" %%i in ('git rev-parse HEAD') do set BEFORE=%%i
+if not defined BEFORE (
+    echo [ERROR] Failed to read current commit.
+    pause
+    exit /b 1
+)
 
 echo [INFO] Pulling latest changes ...
 git pull --ff-only
@@ -66,7 +72,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
+set AFTER=
 for /f "delims=" %%i in ('git rev-parse HEAD') do set AFTER=%%i
+if not defined AFTER (
+    echo [ERROR] Failed to read updated commit.
+    pause
+    exit /b 1
+)
 
 if "%BEFORE%"=="%AFTER%" (
     echo [INFO] Already up to date.
@@ -74,25 +86,29 @@ if "%BEFORE%"=="%AFTER%" (
 
 rem Detect dependency changes with findstr's own errorlevel: piping into
 rem findstr reliably sets errorlevel 0 on a match and 1 on no match, which
-rem is simpler here than capturing findstr output through for /f.
+rem is simpler here than capturing findstr output through for /f. /L makes
+rem the search literal so a dot in "package.json" cannot match any
+rem character as a regex wildcard.
 set DEP_CHANGED=
-git diff --name-only %BEFORE% %AFTER% | findstr /i "package.json package-lock.json" >nul 2>&1
+git diff --name-only %BEFORE% %AFTER% | findstr /i /l /c:"package.json" /c:"package-lock.json" >nul 2>&1
 if not errorlevel 1 set DEP_CHANGED=1
 
 if defined DEP_CHANGED (
-    echo [INFO] Dependencies changed. Running npm run setup ...
+    echo [INFO] Dependencies changed. Stopping service before npm run setup ...
+    nssm stop %SERVICE_NAME% >nul 2>&1
     call npm run setup
     if errorlevel 1 (
-        echo [ERROR] npm run setup failed.
+        echo [ERROR] npm run setup failed. Service is left stopped.
         pause
         exit /b 1
     )
 )
 
 echo [INFO] Restarting service %SERVICE_NAME% ...
-nssm restart %SERVICE_NAME%
+nssm stop %SERVICE_NAME% >nul 2>&1
+nssm start %SERVICE_NAME%
 if errorlevel 1 (
-    echo [WARN] Failed to restart service. Check Event Viewer and %LOG_DIR%.
+    echo [WARN] Failed to start service. Check Event Viewer and %LOG_DIR%.
     pause
     exit /b 1
 )
