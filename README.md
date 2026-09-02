@@ -66,6 +66,16 @@ Excelでの家計管理から移行するために開発された、Webベース
     *   ブラウザで `http://localhost:5173` にアクセスして利用します。
     *   バックエンドAPIは `http://localhost:3001` で動作します。
 
+## Windows サービスとして常駐させる
+
+Windows PC 上で Gravity を常時起動しておきたい場合、[NSSM](https://nssm.cc/) を使ってサービス化できます。
+
+*   **前提**: NSSM をダウンロードし、実行ファイルを PATH に追加しておいてください。
+*   **登録**: `household_service_install.bat` を管理者として実行すると、サービス `HouseholdGravity` が登録・起動されます。
+*   **更新**: `household_service_update.bat` を管理者として実行すると、`git pull` → 依存関係の変更があれば `npm run setup` → サービス再起動、を自動で行います。**未コミットのローカル変更があると更新は中断されます**。
+*   **削除**: `household_service_uninstall.bat` を管理者として実行すると、サービスを停止・削除します。
+*   **ログ**: サービスの標準出力・エラー出力はリポジトリ直下の `logs/` に出力されます。
+
 ## ディレクトリ構成
 
 *   `client/`: フロントエンド (Vue.js) のソースコード
