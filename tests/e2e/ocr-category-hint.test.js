@@ -103,7 +103,7 @@ test.describe('OCR: 店名・明細ヒントからのデフォルト費目推定
     await expect(rows.nth(1).locator('select').first()).toHaveValue('200');
   });
 
-  test('飲食店のレシート: 酒類 (alcohol) は外食費 (103) に振り分けられる', async ({ page }) => {
+  test('飲食店のレシート: 明細ヒントに関わらず全明細が外食費 (103) になる', async ({ page }) => {
     await stubOcrModels(page);
     await page.route('**/api/ocr/analyze', async (route) => {
       await route.fulfill({
@@ -115,7 +115,9 @@ test.describe('OCR: 店名・明細ヒントからのデフォルト費目推定
           items: [
             { description: '生ビール', amount: 600, category_hint: 'alcohol' },
             { description: '唐揚げ', amount: 500, category_hint: 'dining_out' },
-            { description: 'お通し', amount: 300 }
+            { description: 'お通し', amount: 300 },
+            { description: 'サンドイッチ', amount: 400, category_hint: 'food' },
+            { description: 'おしぼり', amount: 100, category_hint: 'daily_goods' }
           ]
         })
       });
@@ -127,6 +129,8 @@ test.describe('OCR: 店名・明細ヒントからのデフォルト費目推定
     await expect(rows.nth(0).locator('select').first()).toHaveValue('103');
     await expect(rows.nth(1).locator('select').first()).toHaveValue('103');
     await expect(rows.nth(2).locator('select').first()).toHaveValue('103');
+    await expect(rows.nth(3).locator('select').first()).toHaveValue('103');
+    await expect(rows.nth(4).locator('select').first()).toHaveValue('103');
   });
 
   test('スーパーのレシート: 酒類 (alcohol) は従来どおり酒 (105) のまま', async ({ page }) => {

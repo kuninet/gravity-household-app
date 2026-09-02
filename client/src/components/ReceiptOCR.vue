@@ -149,12 +149,19 @@ const CATEGORY_CODE_BY_ITEM_HINT = {
 
 // Map a store-level hint to the code used when an item has no explicit hint.
 // Drugstores tend to sell mostly daily goods, so the fallback is 日用品 there.
+// restaurant はここに到達しない: OVERRIDE_CATEGORY_CODE_BY_STORE_HINT が先に効くため (issue #64)
 const FALLBACK_CATEGORY_CODE_BY_STORE_HINT = {
     drugstore: 200,   // 日用品
     pharmacy: 200,    // 日用品 (a pharmacy in Japan mixes medicine and daily goods)
     grocery: 100,     // 食費
     convenience: 100, // 食費
     restaurant: 103   // 外食
+}
+
+// 店舗ヒントによっては明細ヒントより店舗を優先する。
+// 飲食店のレシートは料理・酒・その他をすべて外食費にまとめる (issue #61, #64)
+const OVERRIDE_CATEGORY_CODE_BY_STORE_HINT = {
+    restaurant: 103   // 外食費
 }
 
 // 酒類は軽減税率の対象外。費目コードが 105 でなくても Gemini が alcohol と判定した明細は 10% 扱いにする (issue #61)
@@ -164,9 +171,8 @@ const isReducedTaxTarget = (item) => {
 }
 
 const resolveCategoryCode = (itemHint, storeHint) => {
-    // 飲食店で注文した酒類は外食費にまとめる (issue #61)
-    if (storeHint === 'restaurant' && itemHint === 'alcohol') {
-        return CATEGORY_CODE_BY_ITEM_HINT.dining_out
+    if (storeHint && OVERRIDE_CATEGORY_CODE_BY_STORE_HINT[storeHint] !== undefined) {
+        return OVERRIDE_CATEGORY_CODE_BY_STORE_HINT[storeHint]
     }
     if (itemHint && CATEGORY_CODE_BY_ITEM_HINT[itemHint] !== undefined) {
         return CATEGORY_CODE_BY_ITEM_HINT[itemHint]
