@@ -8,3 +8,4 @@ test*
 /test-results/
 /playwright-report/
 logs/
+DB-sample/
