@@ -103,6 +103,56 @@ test.describe('OCR: 店名・明細ヒントからのデフォルト費目推定
     await expect(rows.nth(1).locator('select').first()).toHaveValue('200');
   });
 
+  test('飲食店のレシート: 酒類 (alcohol) は外食費 (103) に振り分けられる', async ({ page }) => {
+    await stubOcrModels(page);
+    await page.route('**/api/ocr/analyze', async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          store: '居酒屋 花',
+          store_category_hint: 'restaurant',
+          date: new Date().toISOString().slice(0, 10),
+          items: [
+            { description: '生ビール', amount: 600, category_hint: 'alcohol' },
+            { description: '唐揚げ', amount: 500, category_hint: 'dining_out' },
+            { description: 'お通し', amount: 300 }
+          ]
+        })
+      });
+    });
+
+    await openDashboard(page);
+    const { modal } = await openOcrModalWithFile(page);
+    const rows = modal.locator('tbody tr');
+    await expect(rows.nth(0).locator('select').first()).toHaveValue('103');
+    await expect(rows.nth(1).locator('select').first()).toHaveValue('103');
+    await expect(rows.nth(2).locator('select').first()).toHaveValue('103');
+  });
+
+  test('スーパーのレシート: 酒類 (alcohol) は従来どおり酒 (105) のまま', async ({ page }) => {
+    await stubOcrModels(page);
+    await page.route('**/api/ocr/analyze', async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          store: 'ライフ',
+          store_category_hint: 'grocery',
+          date: new Date().toISOString().slice(0, 10),
+          items: [
+            { description: '缶ビール', amount: 250, category_hint: 'alcohol' },
+            { description: '牛乳', amount: 200, category_hint: 'food' }
+          ]
+        })
+      });
+    });
+
+    await openDashboard(page);
+    const { modal } = await openOcrModalWithFile(page);
+    const rows = modal.locator('tbody tr');
+    await expect(rows.nth(0).locator('select').first()).toHaveValue('105');
+    await expect(rows.nth(1).locator('select').first()).toHaveValue('100');
+  });
+
   test('ヒントが一切無い旧レスポンスでも食費 (100) にフォールバックしエラーにならない', async ({ page }) => {
     await stubOcrModels(page);
     await page.route('**/api/ocr/analyze', async (route) => {
