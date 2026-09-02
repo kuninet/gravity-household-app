@@ -106,6 +106,8 @@ if defined DEP_CHANGED (
 
 echo [INFO] Restarting service %SERVICE_NAME% ...
 nssm stop %SERVICE_NAME% >nul 2>&1
+rem Give the service control manager a moment to leave STOP_PENDING.
+timeout /t 2 /nobreak >nul
 nssm start %SERVICE_NAME%
 if errorlevel 1 (
     echo [WARN] Failed to start service. Check Event Viewer and %LOG_DIR%.
