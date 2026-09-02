@@ -153,6 +153,41 @@ test.describe('OCR: 店名・明細ヒントからのデフォルト費目推定
     await expect(rows.nth(1).locator('select').first()).toHaveValue('100');
   });
 
+  test('飲食店の税抜レシート: 酒類は外食費(103)かつ10%課税、料理は8%', async ({ page }) => {
+    await stubOcrModels(page);
+    await page.route('**/api/ocr/analyze', async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          store: '居酒屋 花',
+          store_category_hint: 'restaurant',
+          tax_included: 'excluded',
+          date: new Date().toISOString().slice(0, 10),
+          items: [
+            { description: '生ビール', amount: 600, category_hint: 'alcohol' },
+            { description: '唐揚げ', amount: 500, category_hint: 'dining_out' }
+          ]
+        })
+      });
+    });
+
+    await openDashboard(page);
+    const { modal } = await openOcrModalWithFile(page);
+    const rows = modal.locator('tbody tr');
+
+    // 費目は両方とも外食費 (103)
+    await expect(rows.nth(0).locator('select').first()).toHaveValue('103');
+    await expect(rows.nth(1).locator('select').first()).toHaveValue('103');
+
+    // 生ビール(酒類, 10%): 600*1.10=660 / 唐揚げ(食費8%): 500*1.08=540 → 合計1200
+    await expect(modal.getByText(/合計:\s*1,?200/)).toBeVisible();
+
+    // 生ビールの費目を手動で食費(100)に変更すると酒類フラグが落ち、8%に切り替わる
+    // (600*1.08=648 + 540 = 1188)
+    await rows.nth(0).locator('select').first().selectOption('100');
+    await expect(modal.getByText(/合計:\s*1,?188/)).toBeVisible();
+  });
+
   test('ヒントが一切無い旧レスポンスでも食費 (100) にフォールバックしエラーにならない', async ({ page }) => {
     await stubOcrModels(page);
     await page.route('**/api/ocr/analyze', async (route) => {

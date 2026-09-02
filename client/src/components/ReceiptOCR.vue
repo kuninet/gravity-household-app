@@ -30,7 +30,7 @@ const analyzeMessages = [
 const analyzeMessage = ref("AI解析中...")
 const elapsedSeconds = ref(0)
 let analyzeMessageInterval = null
-const items = ref([]) // { id, description, amount, category_code, taxType }
+const items = ref([]) // { id, description, amount, category_code, taxType, isAlcohol }
 const totalAmount = ref(0)
 const detectedDate = ref('')
 const detectedStore = ref('')
@@ -157,6 +157,12 @@ const FALLBACK_CATEGORY_CODE_BY_STORE_HINT = {
     restaurant: 103   // 外食
 }
 
+// 酒類は軽減税率の対象外。費目コードが 105 でなくても Gemini が alcohol と判定した明細は 10% 扱いにする (issue #61)
+const isReducedTaxTarget = (item) => {
+    const code = Number(item.category_code)
+    return !item.isAlcohol && code >= 100 && code < 200 && code !== 105
+}
+
 const resolveCategoryCode = (itemHint, storeHint) => {
     // 飲食店で注文した酒類は外食費にまとめる (issue #61)
     if (storeHint === 'restaurant' && itemHint === 'alcohol') {
@@ -236,13 +242,14 @@ const analyze = async () => {
                 const amount = Number(item.amount)
                 // Smart category default: item-level hint > store-level hint > 食費 (issue #20)
                 const categoryCode = resolveCategoryCode(item.category_hint, storeHint)
+                const isAlcohol = item.category_hint === 'alcohol'
                 let finalTaxType = 'INCLUDED';
 
                 if (isNegativeAmount(amount)) {
                     finalTaxType = 'INCLUDED';
                 } else if (taxMode.value === 'EXCLUDED') {
-                    // Food (100-199) except Alcohol (105) is 8%; others 10%.
-                    if (categoryCode >= 100 && categoryCode < 200 && categoryCode !== 105) {
+                    // Food (100-199) except Alcohol is 8%; others 10%.
+                    if (isReducedTaxTarget({ category_code: categoryCode, isAlcohol })) {
                         finalTaxType = 'EXCLUDED_8';
                     } else {
                         finalTaxType = 'EXCLUDED_10';
@@ -254,7 +261,8 @@ const analyze = async () => {
                     description: item.description,
                     amount: Number.isFinite(amount) ? amount : item.amount,
                     category_code: categoryCode,
-                    taxType: finalTaxType
+                    taxType: finalTaxType,
+                    isAlcohol
                 }
             })
         }
@@ -279,13 +287,18 @@ const updateTaxType = (item) => {
         item.taxType = 'INCLUDED'
         return
     }
-    // EXCLUDED: food 100-199 excluding alcohol (105) is 8%, others 10%.
-    const code = Number(item.category_code)
-    if (code >= 100 && code < 200 && code !== 105) {
+    // EXCLUDED: food 100-199 excluding alcohol is 8%, others 10%.
+    if (isReducedTaxTarget(item)) {
         item.taxType = 'EXCLUDED_8'
     } else {
         item.taxType = 'EXCLUDED_10'
     }
+}
+
+// ユーザーが費目を手動変更したときは酒類フラグを落として税区分を再計算する (issue #61)
+const onCategoryChange = (item) => {
+    item.isAlcohol = false
+    updateTaxType(item)
 }
 
 const applyTaxModeToAll = () => {
@@ -446,7 +459,7 @@ const apply = () => {
                     <tbody>
                         <tr v-for="(item, index) in items" :key="item.id" class="border-b hover:bg-gray-50">
                             <td class="p-2">
-                                <select v-model="item.category_code" @change="updateTaxType(item)" class="border rounded p-1 w-full">
+                                <select v-model="item.category_code" @change="onCategoryChange(item)" class="border rounded p-1 w-full">
                                     <option v-for="cat in categories" :key="cat.code" :value="cat.code">
                                         {{ cat.name }}
                                     </option>
