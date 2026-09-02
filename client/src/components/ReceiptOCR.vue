@@ -158,6 +158,10 @@ const FALLBACK_CATEGORY_CODE_BY_STORE_HINT = {
 }
 
 const resolveCategoryCode = (itemHint, storeHint) => {
+    // 飲食店で注文した酒類は外食費にまとめる (issue #61)
+    if (storeHint === 'restaurant' && itemHint === 'alcohol') {
+        return CATEGORY_CODE_BY_ITEM_HINT.dining_out
+    }
     if (itemHint && CATEGORY_CODE_BY_ITEM_HINT[itemHint] !== undefined) {
         return CATEGORY_CODE_BY_ITEM_HINT[itemHint]
     }
