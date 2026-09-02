@@ -145,7 +145,7 @@ router.post('/analyze', upload.single('image'), async (req, res) => {
           - "drugstore" / "pharmacy" are stores like マツモトキヨシ / ウエルシア / スギ薬局 whose main goods are daily goods and OTC medicine.
           - "grocery" is a supermarket (イオン / ライフ / 業務スーパー etc).
           - "convenience" is a konbini (セブンイレブン / ローソン / ファミマ etc).
-          - "restaurant" is a sit-down or takeaway food service, including izakaya, bars, pubs, cafes, and fast food chains.
+          - "restaurant" is a sit-down or takeaway food service.
 
         "tax_included": ONE of "included", "excluded", "mixed", or null if unclear.
           - "included": The item amounts already include consumption tax. Typical indicators on Japanese receipts: "税込", "内税", "(税込)", the item price equals a line labeled 税込小計/合計, or the receipt only prints one price per item and 消費税 is shown as a separate summary line without another 税抜 subtotal.
