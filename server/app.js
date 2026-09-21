@@ -1,39 +1,38 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const bodyParser = require('body-parser');
-const db = require('./db');
+require('dotenv').config()
+const express = require('express')
+const cors = require('cors')
+const bodyParser = require('body-parser')
+const db = require('./db')
 
-const app = express();
-const PORT = process.env.PORT || 3001;
+const app = express()
+const PORT = process.env.PORT || 3001
 
 // Middleware
-app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(cors())
+app.use(bodyParser.json())
+app.use(bodyParser.urlencoded({ extended: true }))
 
 // Routes
-const transactionRoutes = require('./routes/transactions');
-const categoryRoutes = require('./routes/categories');
+const transactionRoutes = require('./routes/transactions')
+const categoryRoutes = require('./routes/categories')
 
-app.use('/api/transactions', transactionRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/summary', require('./routes/summary'));
-app.use('/api/analysis', require('./routes/analysis'));
-app.use('/api/fixed_costs', require('./routes/fixed_costs'));
-app.use('/api/import', require('./routes/import'));
-app.use('/api/ocr', require('./routes/ocr'));
-app.use('/api/backup', require('./routes/backup'));
-app.use('/api/receipts', require('./routes/receipts'));
+app.use('/api/transactions', transactionRoutes)
+app.use('/api/categories', categoryRoutes)
+app.use('/api/summary', require('./routes/summary'))
+app.use('/api/analysis', require('./routes/analysis'))
+app.use('/api/fixed_costs', require('./routes/fixed_costs'))
+app.use('/api/import', require('./routes/import'))
+app.use('/api/ocr', require('./routes/ocr'))
+app.use('/api/backup', require('./routes/backup'))
+app.use('/api/receipts', require('./routes/receipts'))
+app.use('/api/price_trend', require('./routes/price_trend'))
 
 // Health check
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', message: 'Household Account App API is running' });
-});
-
-
+  res.json({ status: 'ok', message: 'Household Account App API is running' })
+})
 
 // Start server
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
+  console.log(`Server is running on port ${PORT}`)
+})
