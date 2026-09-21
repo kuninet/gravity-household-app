@@ -109,6 +109,16 @@ const doSearch = async (kw = null) => {
   }
 }
 
+const changeSearchMode = (mode) => {
+  searchMode.value = mode
+  doSearch()
+}
+
+const changeDateRange = (range) => {
+  dateRange.value = range
+  doSearch()
+}
+
 // ユーザーが特定品名を除外/含めるトグル
 const toggleItemName = (name) => {
   const next = new Set(selectedItemNames.value)
@@ -348,10 +358,7 @@ const fmtDiff = (n) => {
           <div class="flex bg-rule-soft p-0.5 rounded-lg text-[12px]">
             <button
               type="button"
-              @click="
-                searchMode = 'jev'
-                doSearch()
-              "
+              @click="changeSearchMode('jev')"
               class="px-2.5 py-1 rounded-md transition font-medium"
               :class="
                 searchMode === 'jev' ? 'bg-surface text-ink shadow-xs' : 'text-ink-2 hover:text-ink'
@@ -362,10 +369,7 @@ const fmtDiff = (n) => {
             </button>
             <button
               type="button"
-              @click="
-                searchMode = 'simple'
-                doSearch()
-              "
+              @click="changeSearchMode('simple')"
               class="px-2.5 py-1 rounded-md transition font-medium"
               :class="
                 searchMode === 'simple'
@@ -388,10 +392,7 @@ const fmtDiff = (n) => {
               ]"
               :key="r.key"
               type="button"
-              @click="
-                dateRange = r.key
-                doSearch()
-              "
+              @click="changeDateRange(r.key)"
               class="px-2 py-1 rounded-md transition font-medium"
               :class="
                 dateRange === r.key ? 'bg-surface text-ink shadow-xs' : 'text-ink-2 hover:text-ink'
