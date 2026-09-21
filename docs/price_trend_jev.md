@@ -34,39 +34,39 @@ TypeSafe AI が提供する決定論的判定モデル **「Jev」** を採用�
 
 ```mermaid
 flowchart TD
-    User([ユーザー]) -->|1. キーワード入力「納豆」| UI[PriceTrendView.vue]
-    UI -->|2. GET /api/price_trend?keyword=納豆| API[Express API: price_trend.js]
+    User["ユーザー"] -->|"1. キーワード入力「納豆」"| UI["PriceTrendView.vue"]
+    UI -->|"2. GET /api/price_trend?keyword=納豆"| API["Express API: price_trend.js"]
 
-    subgraph Backend [バックエンド集計 & 判定]
-        API -->|3. 支出データ抽出 (amount > 0)| DB[(SQLite: transactions)]
-        DB -->|取引明細| API
-        API -->|4. 取引行を走査しユニーク品名を抽出| Agg[品名候補一覧 (最大100件)]
+    subgraph Backend["バックエンド集計と判定"]
+        API -->|"3. 支出データ抽出 (正数明細)"| DB[("SQLite: transactions")]
+        DB -->|"取引明細"| API
+        API -->|"4. 取引行を走査しユニーク品名を抽出"| Agg["品名候補一覧 (最大100件)"]
 
-        Agg -->|5. キャッシュ確認| Cache{LRUCache<br/>上限2000件}
-        Cache -->|ヒット| Matched[判定結果一覧]
+        Agg -->|"5. キャッシュ確認"| Cache{"LRUCache<br/>上限2000件"}
+        Cache -->|"ヒット"| Matched["判定結果一覧"]
 
-        Cache -->|未キャッシュ| ModeCheck{モード & キー確認<br/>TYPESAFE_API_KEY?}
+        Cache -->|"未キャッシュ"| ModeCheck{"モードとキー確認<br/>TYPESAFE_API_KEY"}
 
-        ModeCheck -->|有効 (Jev)| JevCall[TypeSafe AI Jev API<br/>client.systemOne<br/>5秒タイムアウト]
-        ModeCheck -->|未設定 / simpleモード| Fallback[正規化フォールバック<br/>全角半角/カナ変換/部分一致]
+        ModeCheck -->|"有効 (Jev)"| JevCall["TypeSafe AI Jev API<br/>client.systemOne<br/>5秒タイムアウト"]
+        ModeCheck -->|"未設定 / simpleモード"| Fallback["正規化フォールバック<br/>全角半角・カナ変換・部分一致"]
 
-        JevCall -->|判定成功 (isMatch & prob)| Cache
-        JevCall -.->|一時エラー/タイムアウト| Fallback
+        JevCall -->|"判定成功"| Cache
+        JevCall -.->|"一時エラー / タイムアウト"| Fallback
 
-        Fallback -->|未設定時の結果| Cache
-        Fallback -.->|一時エラー時の結果 (キャッシュ非保存)| Matched
+        Fallback -->|"未設定時の結果"| Cache
+        Fallback -.->|"一時エラー時の結果"| Matched
         Cache --> Matched
     end
 
-    Matched -->|6. サマリー計算 & 取引データ返却| API
-    API -->|7. JSONレスポンス| UI
+    Matched -->|"6. サマリー計算と取引データ返却"| API
+    API -->|"7. JSONレスポンス"| UI
 
-    subgraph Frontend [画面表示 & クライアント動的再集計]
-        UI --> Tags[品名タグ: クリックで除外/再追加]
-        Tags -.->|クライアント側で即時再計算| Dynamic[動的サマリー & フィルタ]
-        Dynamic --> Cards[統計カード: 平均/最安/最高/前回比]
-        Dynamic --> Chart[Chart.js 折れ線グラフ]
-        Dynamic --> Table[明細テーブル: ページネーション & ソート]
+    subgraph Frontend["画面表示とクライアント動的再集計"]
+        UI --> Tags["品名タグ (クリックで除外/再追加)"]
+        Tags -.->|"クライアント側で即時再計算"| Dynamic["動的サマリーとフィルタ"]
+        Dynamic --> Cards["統計カード: 平均/最安/最高/前回比"]
+        Dynamic --> Chart["Chart.js 折れ線グラフ"]
+        Dynamic --> Table["明細テーブル: ページネーションとソート"]
     end
 ```
 
