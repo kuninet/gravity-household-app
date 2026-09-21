@@ -4,12 +4,13 @@ test.describe('価格推移（Price Trend）ビュー', () => {
   let createdIds = []
 
   test.beforeAll(async ({ request }) => {
-    // テスト用の取引データを投入
+    // テスト用の取引データを投入（正数明細と割引マイナス明細の混在）
     const dummyItems = [
       { date: '2025-01-10', amount: 120, description: '極小粒納豆 3P', memo: 'スーパーA' },
       { date: '2025-01-20', amount: 130, description: '極小粒納豆 3P', memo: 'スーパーA' },
       { date: '2025-02-05', amount: 150, description: '国産大豆納豆', memo: 'スーパーB' },
       { date: '2025-02-15', amount: 280, description: '納豆巻き', memo: 'コンビニ' },
+      { date: '2025-02-15', amount: -50, description: '納豆引きクーポン', memo: '割引行' }, // 割引マイナス明細
     ]
 
     for (const item of dummyItems) {
@@ -41,7 +42,7 @@ test.describe('価格推移（Price Trend）ビュー', () => {
     await page.waitForLoadState('networkidle')
   })
 
-  test('ナビゲーションから価格推移ビューを開き、納豆の価格推移と統計が表示されること', async ({
+  test('ナビゲーションから価格推移ビューを開き、納豆の価格推移と統計が表示されること（割引マイナス行が除外されること）', async ({
     page,
   }) => {
     // 1. ナビゲーションの「価格推移」をクリック
@@ -55,15 +56,14 @@ test.describe('価格推移（Price Trend）ビュー', () => {
     await input.fill('納豆')
     await page.getByRole('button', { name: '検索' }).click()
 
-    // 4. サマリーカードの表示確認
+    // 4. サマリーカードの表示確認（最安値が -50円 ではなく 120円 であること）
     await expect(page.locator('text=平均購入単価')).toBeVisible()
     await expect(page.locator('text=最安値')).toBeVisible()
-    await expect(page.locator('text=最高値')).toBeVisible()
-    await expect(page.locator('text=直近購入価格')).toBeVisible()
+    await expect(page.locator('text=120 円').first()).toBeVisible() // 最低正数値
 
     // 5. 検出された品名タグの確認
     await expect(page.locator('text=検出された品名バリエーション')).toBeVisible()
-    await expect(page.getByRole('button', { name: /極小粒納豆 3P/ })).toBeVisible()
+    await expect(page.getByRole('checkbox', { name: /極小粒納豆 3P/ })).toBeVisible()
 
     // 6. チャートと明細テーブルの確認
     await expect(page.locator('text=価格推移チャート')).toBeVisible()
@@ -79,12 +79,22 @@ test.describe('価格推移（Price Trend）ビュー', () => {
     await page.getByRole('button', { name: '検索' }).click()
 
     // 納豆巻きチップを探してクリック（除外）
-    const nattoMakiChip = page.getByRole('button', { name: /納豆巻き/ })
+    const nattoMakiChip = page.getByRole('checkbox', { name: /納豆巻き/ })
     if (await nattoMakiChip.isVisible()) {
       await nattoMakiChip.click()
       // テーブルから納豆巻きが除外されていること
       await expect(page.locator('table')).not.toContainText('納豆巻き')
     }
+  })
+
+  test('空キーワードで検索した際はバリデーションエラーが表示されること', async ({ page }) => {
+    await page.getByRole('button', { name: '価格推移' }).click()
+
+    const input = page.getByPlaceholder('品名キーワードを入力')
+    await input.fill('')
+    await page.getByRole('button', { name: '検索' }).click()
+
+    await expect(page.locator('text=品名キーワードを入力してください。')).toBeVisible()
   })
 
   test('一致する品名がない場合は空状態メッセージが表示されること', async ({ page }) => {

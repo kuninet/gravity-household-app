@@ -38,6 +38,10 @@ const selectedItemNames = ref(new Set())
 const sortField = ref('date') // 'date' | 'amount'
 const sortOrder = ref('asc') // 'asc' | 'desc'
 
+// ページネーション
+const currentPage = ref(1)
+const pageSize = 20
+
 // ダークテーマ監視
 const themeBump = ref(0)
 let observer = null
@@ -58,11 +62,16 @@ const isDark = computed(() => {
 
 const QUICK_KEYWORDS = ['納豆', '卵', '牛乳', '豆腐', 'ビール', '弁当', '食パン']
 
+// 閏年を考慮した安全な日付計算
 const dateRangeBounds = computed(() => {
   if (dateRange.value === 'all') return { from: null, to: null }
   const now = new Date()
   const years = dateRange.value === '1y' ? 1 : 3
-  const past = new Date(now.getFullYear() - years, now.getMonth(), now.getDate())
+  const targetYear = now.getFullYear() - years
+  const targetMonth = now.getMonth()
+  const targetDay = Math.min(now.getDate(), 28) // 閏年エッジケース安全策
+  const past = new Date(targetYear, targetMonth, targetDay)
+
   const y = past.getFullYear()
   const m = String(past.getMonth() + 1).padStart(2, '0')
   const d = String(past.getDate()).padStart(2, '0')
@@ -70,16 +79,21 @@ const dateRangeBounds = computed(() => {
 })
 
 const doSearch = async (kw = null) => {
-  if (kw) keyword.value = kw
-  if (!keyword.value.trim()) return
+  if (kw !== null) keyword.value = kw
+  const trimmed = keyword.value.trim()
+  if (!trimmed) {
+    errorMessage.value = '品名キーワードを入力してください。'
+    return
+  }
 
   isLoading.value = true
   errorMessage.value = ''
+  currentPage.value = 1
 
   try {
     const { from, to } = dateRangeBounds.value
     const res = await fetchPriceTrend({
-      keyword: keyword.value.trim(),
+      keyword: trimmed,
       mode: searchMode.value,
       from,
       to,
@@ -99,7 +113,6 @@ const doSearch = async (kw = null) => {
 const toggleItemName = (name) => {
   const next = new Set(selectedItemNames.value)
   if (next.has(name)) {
-    // 最後の1つは解除できないようにする（空防止）
     if (next.size > 1) {
       next.delete(name)
     }
@@ -107,11 +120,13 @@ const toggleItemName = (name) => {
     next.add(name)
   }
   selectedItemNames.value = next
+  currentPage.value = 1
 }
 
 const selectAllItems = () => {
   if (!trendResult.value) return
   selectedItemNames.value = new Set(trendResult.value.matched_items.map((i) => i.name))
+  currentPage.value = 1
 }
 
 // 選択中の品名のみに絞り込んだレコード一覧
@@ -135,6 +150,13 @@ const sortedRows = computed(() => {
   return rows
 })
 
+// ページネーション適用レコード
+const totalPages = computed(() => Math.max(1, Math.ceil(sortedRows.value.length / pageSize)))
+const pagedRows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return sortedRows.value.slice(start, start + pageSize)
+})
+
 const toggleSort = (field) => {
   if (sortField.value === field) {
     sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
@@ -144,7 +166,7 @@ const toggleSort = (field) => {
   }
 }
 
-// 選択中品名に基づいた動的サマリー
+// 選択中品名に基づいた動的サマリー（スプレッド構文を使わず安全に算出）
 const dynamicSummary = computed(() => {
   const rows = filteredRows.value
   const count = rows.length
@@ -159,11 +181,16 @@ const dynamicSummary = computed(() => {
       price_diff: null,
     }
   }
-  const amounts = rows.map((r) => r.amount)
-  const total = amounts.reduce((sum, a) => sum + a, 0)
+
+  let total = 0
+  let min = rows[0].amount
+  let max = rows[0].amount
+  for (const r of rows) {
+    total += r.amount
+    if (r.amount < min) min = r.amount
+    if (r.amount > max) max = r.amount
+  }
   const avg = Math.round(total / count)
-  const min = Math.min(...amounts)
-  const max = Math.max(...amounts)
   const latest = rows[rows.length - 1]
   const prev = count > 1 ? rows[rows.length - 2] : null
   const diff = latest && prev ? latest.amount - prev.amount : null
@@ -382,6 +409,7 @@ const fmtDiff = (n) => {
           <input
             v-model="keyword"
             type="text"
+            maxlength="100"
             placeholder="品名キーワードを入力（例: 納豆、牛乳、卵、豆腐、ガソリン）"
             class="w-full px-3.5 py-2 text-sm rounded-lg border border-rule bg-ground text-ink focus:outline-none focus:border-accent"
           />
@@ -390,6 +418,7 @@ const fmtDiff = (n) => {
             type="button"
             @click="keyword = ''"
             class="absolute right-3 top-1/2 -translate-y-1/2 text-ink-3 hover:text-ink text-xs"
+            aria-label="入力をクリア"
           >
             ✕
           </button>
@@ -437,6 +466,7 @@ const fmtDiff = (n) => {
     <div
       v-if="errorMessage"
       class="p-4 bg-red-500/10 text-red-600 rounded-xl text-sm border border-red-500/20"
+      role="alert"
     >
       {{ errorMessage }}
     </div>
@@ -531,13 +561,15 @@ const fmtDiff = (n) => {
           </button>
         </div>
 
-        <div class="flex flex-wrap gap-1.5 pt-1">
+        <div class="flex flex-wrap gap-1.5 pt-1" role="group" aria-label="品名フィルター">
           <button
             v-for="item in trendResult.matched_items"
             :key="item.name"
             type="button"
+            role="checkbox"
+            :aria-checked="selectedItemNames.has(item.name)"
             @click="toggleItemName(item.name)"
-            class="px-2.5 py-1 rounded-lg text-xs border transition flex items-center gap-1.5"
+            class="px-2.5 py-1 rounded-lg text-xs border transition flex items-center gap-1.5 cursor-pointer"
             :class="
               selectedItemNames.has(item.name)
                 ? 'bg-accent/10 border-accent text-ink font-semibold'
@@ -569,22 +601,49 @@ const fmtDiff = (n) => {
       <div class="p-5 bg-surface border border-rule rounded-xl space-y-3">
         <div class="flex items-center justify-between">
           <h3 class="text-sm font-bold text-ink">📝 購入明細一覧</h3>
-          <span class="text-xs text-ink-3">クリックで列ソート可能</span>
+          <span class="text-xs text-ink-3">
+            全 {{ sortedRows.length }} 件中 {{ (currentPage - 1) * pageSize + 1 }}〜{{
+              Math.min(currentPage * pageSize, sortedRows.length)
+            }}
+            件表示
+          </span>
         </div>
 
         <div class="overflow-x-auto">
-          <table class="w-full text-xs text-left">
+          <table class="w-full text-xs text-left" role="table">
             <thead class="border-b border-rule text-ink-2 bg-rule-soft/50">
               <tr>
                 <th
+                  role="columnheader"
+                  tabindex="0"
+                  :aria-sort="
+                    sortField === 'date'
+                      ? sortOrder === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                  "
                   @click="toggleSort('date')"
+                  @keydown.enter.prevent="toggleSort('date')"
+                  @keydown.space.prevent="toggleSort('date')"
                   class="py-2.5 px-3 cursor-pointer hover:text-ink font-semibold select-none"
                 >
                   日付 {{ sortField === 'date' ? (sortOrder === 'asc' ? '▲' : '▼') : '' }}
                 </th>
                 <th class="py-2.5 px-3 font-semibold">品名 (description)</th>
                 <th
+                  role="columnheader"
+                  tabindex="0"
+                  :aria-sort="
+                    sortField === 'amount'
+                      ? sortOrder === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                  "
                   @click="toggleSort('amount')"
+                  @keydown.enter.prevent="toggleSort('amount')"
+                  @keydown.space.prevent="toggleSort('amount')"
                   class="py-2.5 px-3 text-right cursor-pointer hover:text-ink font-semibold select-none"
                 >
                   購入金額 {{ sortField === 'amount' ? (sortOrder === 'asc' ? '▲' : '▼') : '' }}
@@ -594,7 +653,7 @@ const fmtDiff = (n) => {
               </tr>
             </thead>
             <tbody class="divide-y divide-rule font-tabular">
-              <tr v-for="row in sortedRows" :key="row.id" class="hover:bg-ground/50 transition">
+              <tr v-for="row in pagedRows" :key="row.id" class="hover:bg-ground/50 transition">
                 <td class="py-2 px-3 font-mono text-ink">{{ row.date }}</td>
                 <td class="py-2 px-3 text-ink font-medium">{{ row.description }}</td>
                 <td class="py-2 px-3 text-right font-bold text-ink">
@@ -605,6 +664,27 @@ const fmtDiff = (n) => {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Pagination Controls -->
+        <div v-if="totalPages > 1" class="flex items-center justify-between pt-2 text-xs">
+          <button
+            type="button"
+            :disabled="currentPage <= 1"
+            @click="currentPage--"
+            class="px-3 py-1 rounded-md border border-rule text-ink-2 hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            ‹ 前へ
+          </button>
+          <span class="text-ink-3"> {{ currentPage }} / {{ totalPages }} ページ </span>
+          <button
+            type="button"
+            :disabled="currentPage >= totalPages"
+            @click="currentPage++"
+            class="px-3 py-1 rounded-md border border-rule text-ink-2 hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            次へ ›
+          </button>
         </div>
       </div>
     </template>
