@@ -13,13 +13,31 @@
     "test:e2e": "node scripts/run-e2e.js",
     "test:e2e:discount": "npm run seed && node scripts/run-e2e.js tests/e2e/negative-discount.test.js --project=chromium",
     "test:e2e:multi-year": "npm run seed && node scripts/run-e2e.js tests/e2e/multi-year-analysis.test.js --project=chromium",
+    "test:e2e:price-trend": "npm run seed && node scripts/run-e2e.js tests/e2e/price-trend.test.js --project=chromium",
     "test:e2e:headed": "node scripts/run-e2e.js --headed",
     "test:e2e:debug": "node scripts/run-e2e.js --debug",
-    "check:receipts": "node scripts/check-receipts.js"
+    "check:receipts": "node scripts/check-receipts.js",
+    "test:unit": "node --test tests/unit/**/*.test.js",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.40.0",
     "concurrently": "^8.2.2",
-    "npm-run-all": "^4.1.5"
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.1",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.9.8"
+  },
+  "lint-staged": {
+    "*.{js,cjs,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,vue,css}": [
+      "prettier --write"
+    ]
   }
 }
