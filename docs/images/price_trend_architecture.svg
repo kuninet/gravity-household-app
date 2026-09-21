@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 500" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrowJev" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#10b981"/>
+    </marker>
+    <marker id="arrowReturn" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#34d399"/>
+    </marker>
+    <marker id="arrowSub" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrowWarn" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#fbbf24"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="880" height="500" rx="16" fill="url(#bgGrad)" stroke="#334155" stroke-width="1.5"/>
+
+  <!-- Title Header -->
+  <text x="40" y="45" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="700" fill="#f8fafc">
+    📈 品名価格推移（Price Trend）システム構成 &amp; Jev判定フロー
+  </text>
+  <text x="40" y="68" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" fill="#94a3b8">
+    TypeSafe AI Jev（決定論的判定モデル）によるスマート抽出と自動フォールバック機構
+  </text>
+
+  <!-- ==================== FRONTEND COLUMN ==================== -->
+  <g transform="translate(40, 95)" filter="url(#shadow)">
+    <!-- Container Box -->
+    <rect width="240" height="365" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+    <rect width="240" height="40" rx="12" fill="#0f172a"/>
+    <rect y="28" width="240" height="12" fill="#0f172a"/>
+    <text x="16" y="25" font-family="sans-serif" font-size="13" font-weight="700" fill="#38bdf8">
+      💻 Frontend (Vue 3 SPA)
+    </text>
+    <text x="16" y="55" font-family="sans-serif" font-size="11" font-weight="600" fill="#cbd5e1">
+      PriceTrendView.vue
+    </text>
+
+    <!-- Search Bar -->
+    <rect x="14" y="70" width="212" height="36" rx="6" fill="#0f172a" stroke="#475569" stroke-width="1"/>
+    <text x="24" y="93" font-family="sans-serif" font-size="11" fill="#94a3b8">🔍 「納豆」「牛乳」等を入力</text>
+
+    <!-- Filter Chips -->
+    <rect x="14" y="118" width="212" height="52" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+    <text x="22" y="135" font-family="sans-serif" font-size="10" font-weight="600" fill="#64748b">品名タグ（即座にクライアント再集計）</text>
+    <rect x="22" y="142" width="90" height="20" rx="4" fill="#0284c7" opacity="0.3"/>
+    <text x="28" y="156" font-family="sans-serif" font-size="10" fill="#38bdf8">✓ お好み納豆</text>
+    <rect x="118" y="142" width="70" height="20" rx="4" fill="#334155" opacity="0.5"/>
+    <text x="124" y="156" font-family="sans-serif" font-size="10" fill="#64748b" text-decoration="line-through">✕ 納豆巻</text>
+
+    <!-- Summary Cards -->
+    <rect x="14" y="182" width="100" height="48" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+    <text x="22" y="198" font-family="sans-serif" font-size="9" fill="#94a3b8">平均購入価格</text>
+    <text x="22" y="218" font-family="sans-serif" font-size="14" font-weight="700" fill="#f8fafc">64 円</text>
+
+    <rect x="126" y="182" width="100" height="48" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+    <text x="134" y="198" font-family="sans-serif" font-size="9" fill="#10b981">最安値</text>
+    <text x="134" y="218" font-family="sans-serif" font-size="14" font-weight="700" fill="#10b981">51 円</text>
+
+    <!-- Chart -->
+    <rect x="14" y="242" width="212" height="65" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+    <text x="22" y="258" font-family="sans-serif" font-size="9" fill="#94a3b8">Chart.js 折れ線グラフ</text>
+    <path d="M 25 290 Q 60 270 90 285 T 150 265 T 210 275" fill="none" stroke="#38bdf8" stroke-width="2"/>
+    <path d="M 25 280 L 210 280" fill="none" stroke="#f43f5e" stroke-dasharray="3,3" stroke-width="1.5"/>
+
+    <!-- Table -->
+    <rect x="14" y="318" width="212" height="35" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+    <text x="22" y="339" font-family="sans-serif" font-size="10" fill="#cbd5e1">📝 履歴明細（ソート &amp; ページ制御）</text>
+  </g>
+
+  <!-- Arrow: Frontend -> Backend -->
+  <path d="M 280 230 L 325 230" fill="none" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="282" y="220" font-family="sans-serif" font-size="9" fill="#38bdf8">GET /api/price_trend</text>
+
+  <!-- Arrow: Backend -> Frontend -->
+  <path d="M 325 260 L 280 260" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrowSub)"/>
+  <text x="285" y="275" font-family="sans-serif" font-size="9" fill="#94a3b8">JSONレスポンス</text>
+
+  <!-- ==================== BACKEND COLUMN ==================== -->
+  <g transform="translate(330, 95)" filter="url(#shadow)">
+    <!-- Container Box -->
+    <rect width="250" height="365" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+    <rect width="250" height="40" rx="12" fill="#0f172a"/>
+    <rect y="28" width="250" height="12" fill="#0f172a"/>
+    <text x="16" y="25" font-family="sans-serif" font-size="13" font-weight="700" fill="#38bdf8">
+      ⚙️ Backend (Express API)
+    </text>
+
+    <!-- DB Fetch -->
+    <rect x="14" y="55" width="222" height="50" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+    <text x="24" y="73" font-family="sans-serif" font-size="10" font-weight="600" fill="#e2e8f0">1. 取引データ抽出 (SQLite)</text>
+    <text x="24" y="90" font-family="sans-serif" font-size="9" fill="#94a3b8">amount &gt; 0 (割引行除外) &amp; 期間絞込</text>
+
+    <!-- Unique Aggregation -->
+    <rect x="14" y="117" width="222" height="50" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+    <text x="24" y="135" font-family="sans-serif" font-size="10" font-weight="600" fill="#e2e8f0">2. ユニーク品名抽出 &amp; 集計</text>
+    <text x="24" y="152" font-family="sans-serif" font-size="9" fill="#94a3b8">出現頻度をO(M)事前集計 (最大100候補)</text>
+
+    <!-- LRU Cache -->
+    <rect x="14" y="179" width="222" height="58" rx="6" fill="#0f172a" stroke="#0284c7" stroke-width="1"/>
+    <text x="24" y="197" font-family="sans-serif" font-size="10" font-weight="600" fill="#38bdf8">3. LRUCache 照合 (上限2000件)</text>
+    <text x="24" y="214" font-family="sans-serif" font-size="9" fill="#94a3b8">キャッシュヒット時はAPI通信不要</text>
+    <text x="24" y="228" font-family="sans-serif" font-size="9" fill="#64748b">OOM防止 / 高速レスポンス</text>
+
+    <!-- Service Dispatcher -->
+    <rect x="14" y="249" width="222" height="98" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+    <text x="24" y="268" font-family="sans-serif" font-size="10" font-weight="600" fill="#e2e8f0">4. jevService 判定振り分け</text>
+    <text x="24" y="287" font-family="sans-serif" font-size="9" fill="#10b981">● TYPESAFE_API_KEY 有効</text>
+    <text x="36" y="301" font-family="sans-serif" font-size="8.5" fill="#94a3b8">➔ Jev (System One) バッチ問い合わせ</text>
+    <text x="24" y="322" font-family="sans-serif" font-size="9" fill="#f59e0b">● キー未設定 / simpleモード時</text>
+    <text x="36" y="336" font-family="sans-serif" font-size="8.5" fill="#94a3b8">➔ カナ正規化 部分一致フォールバック</text>
+  </g>
+
+  <!-- Arrow: Backend -> Jev -->
+  <path d="M 580 280 L 625 210" fill="none" stroke="#10b981" stroke-width="2" marker-end="url(#arrowJev)"/>
+  <text x="583" y="235" font-family="sans-serif" font-size="8.5" fill="#10b981">client.systemOne()</text>
+
+  <!-- Arrow: Jev -> Backend (Return) -->
+  <path d="M 625 240 L 580 295" fill="none" stroke="#34d399" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrowReturn)"/>
+  <text x="588" y="268" font-family="sans-serif" font-size="8" fill="#34d399">isMatch/prob</text>
+
+  <!-- Arrow: Backend -> Fallback -->
+  <path d="M 580 330 L 625 385" fill="none" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arrowWarn)"/>
+  <text x="583" y="365" font-family="sans-serif" font-size="8.5" fill="#f59e0b">simpleMatch()</text>
+
+  <!-- Arrow: Fallback -> Backend (Return) -->
+  <path d="M 625 410 L 580 345" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrowSub)"/>
+  <text x="588" y="395" font-family="sans-serif" font-size="8" fill="#94a3b8">一致結果</text>
+
+  <!-- ==================== DECISION ENGINE COLUMN ==================== -->
+  <!-- Jev Cloud Box -->
+  <g transform="translate(630, 120)" filter="url(#shadow)">
+    <rect width="210" height="175" rx="12" fill="#064e3b" stroke="#10b981" stroke-width="1.5"/>
+    <rect width="210" height="36" rx="12" fill="#022c22"/>
+    <rect y="24" width="210" height="12" fill="#022c22"/>
+    <text x="14" y="24" font-family="sans-serif" font-size="12" font-weight="700" fill="#34d399">
+      ⚡ TypeSafe AI「Jev」
+    </text>
+    <text x="14" y="55" font-family="sans-serif" font-size="10" font-weight="600" fill="#ecfdf5">System One 決定モデル</text>
+    <text x="14" y="75" font-family="sans-serif" font-size="9" fill="#a7f3d0">• テキスト非生成・超低遅延 (&lt;50ms)</text>
+    <text x="14" y="93" font-family="sans-serif" font-size="9" fill="#a7f3d0">• 入力: $0.042/1M tokens (出力無料)</text>
+    
+    <rect x="12" y="108" width="186" height="52" rx="6" fill="#022c22" stroke="#059669" stroke-width="1"/>
+    <text x="20" y="125" font-family="sans-serif" font-size="9" font-weight="600" fill="#6ee7b7">noul 判定質問:</text>
+    <text x="20" y="140" font-family="sans-serif" font-size="8" fill="#d1fae5">"Does item represent '${keyword}'?"</text>
+    <text x="20" y="152" font-family="sans-serif" font-size="8" fill="#34d399">➔ probability (0.0〜1.0) &amp; match</text>
+  </g>
+
+  <!-- Fallback Engine Box -->
+  <g transform="translate(630, 315)" filter="url(#shadow)">
+    <rect width="210" height="145" rx="12" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5"/>
+    <rect width="210" height="36" rx="12" fill="#451a03"/>
+    <rect y="24" width="210" height="12" fill="#451a03"/>
+    <text x="14" y="24" font-family="sans-serif" font-size="12" font-weight="700" fill="#fbbf24">
+      🛡️ 安全フォールバック
+    </text>
+    <text x="14" y="55" font-family="sans-serif" font-size="10" font-weight="600" fill="#fef3c7">ローカル正規化マッチ</text>
+    <text x="14" y="75" font-family="sans-serif" font-size="9" fill="#cbd5e1">• NFKC全角半角正規化</text>
+    <text x="14" y="93" font-family="sans-serif" font-size="9" fill="#cbd5e1">• カタカナ ⇄ ひらがな 相互変換</text>
+    <text x="14" y="111" font-family="sans-serif" font-size="9" fill="#cbd5e1">• 外部API非依存で安全に継続動作</text>
+    <text x="14" y="129" font-family="sans-serif" font-size="9" fill="#f59e0b">ネットワーク切断時も利用可能</text>
+  </g>
+</svg>
