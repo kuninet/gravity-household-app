@@ -28,6 +28,19 @@ export async function createTransaction(data) {
   return res.json()
 }
 
+export async function createTransactionsBatch(transactions) {
+  const res = await fetch(`${API_BASE}/transactions/batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transactions }),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error || 'Failed to create transactions batch')
+  }
+  return res.json()
+}
+
 export async function deleteTransaction(id) {
   const res = await fetch(`${API_BASE}/transactions/${id}`, {
     method: 'DELETE',
