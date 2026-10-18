@@ -20,17 +20,23 @@ function createMcpServer() {
   )
 
   // 疎通確認用ツール: get_fiscal_month
-  server.tool(
+  server.registerTool(
     'get_fiscal_month',
-    '日付（YYYY-MM-DD）から会計月（YYYY-MM）および会計月期間（前月23日〜当月22日）を取得します。',
     {
-      date: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/, '日付は YYYY-MM-DD 形式で指定してください')
-        .refine(
-          (val) => isValidDateString(val),
-          'カレンダー上に実在しない無効な日付です（例: 2026-02-30 など）'
-        ),
+      description:
+        '日付（YYYY-MM-DD）から会計月（YYYY-MM）および会計月期間（前月23日〜当月22日）を取得します。',
+      inputSchema: {
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, '日付は YYYY-MM-DD 形式で指定してください')
+          .refine(
+            (val) => isValidDateString(val),
+            'カレンダー上に実在しない無効な日付です（例: 2026-02-30 など）'
+          ),
+      },
+      annotations: {
+        readOnlyHint: true,
+      },
     },
     async ({ date }) => {
       try {

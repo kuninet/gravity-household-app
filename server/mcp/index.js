@@ -24,7 +24,7 @@ function createMcpRouter() {
     if (allowedList.length === 0) return next()
 
     const hostHeader = (req.headers['host'] || '').toLowerCase()
-    const hostWithoutPort = hostHeader.split(':')[0]
+    const hostWithoutPort = hostHeader.replace(/:\d+$/, '')
 
     const isAllowed = allowedList.some((h) => hostHeader === h || hostWithoutPort === h)
     if (!isAllowed) {
@@ -55,11 +55,12 @@ function createMcpRouter() {
   router.generalLimiter = generalLimiter
 
   // 4. 認証失敗レート制限 (15分で10回失敗時に 429)
-  // skipSuccessfulRequests: true により 400 未満の成功時はカウントから除外される
+  // requestWasSuccessful により 401 以外のレスポンス（成功や他エラー）は失敗カウントから除外される
   const authFailLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 10,
     skipSuccessfulRequests: true,
+    requestWasSuccessful: (req, res) => res.statusCode !== 401,
     standardHeaders: true,
     legacyHeaders: false,
     validate: { xForwardedForHeader: false },
@@ -98,16 +99,21 @@ function createMcpRouter() {
 
   // 7. POST 以外の HTTP メソッドは 405 Method Not Allowed
   router.all('/', (req, res) => {
+    res.setHeader('Allow', 'POST')
     res.status(405).json({
       jsonrpc: '2.0',
-      error: { code: -32601, message: 'Method Not Allowed' },
+      error: { code: -32000, message: 'Method Not Allowed' },
       id: null,
     })
   })
 
   // 8. /mcp 専用エラーハンドラ
   // JSON 構文エラーは 400 + -32700、413 は 413 + -32600、その他は 500 + -32603
-  router.use((err, req, res, _next) => {
+  router.use((err, req, res, next) => {
+    if (res.headersSent) {
+      return next(err)
+    }
+
     if (err.status === 413 || err.statusCode === 413 || err.type === 'entity.too.large') {
       return res.status(413).json({
         jsonrpc: '2.0',

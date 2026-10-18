@@ -34,8 +34,11 @@ function mcpAuth(req, res, next) {
   let clientToken = null
   const authHeader = req.headers['authorization']
 
-  if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-    clientToken = authHeader.slice(7).trim()
+  if (authHeader && typeof authHeader === 'string') {
+    const match = authHeader.match(/^Bearer\s+(.+)$/i)
+    if (match) {
+      clientToken = match[1].trim()
+    }
   }
 
   // 3. クエリパラメータ fallback (MCP_ALLOW_QUERY_TOKEN=true 時のみ)

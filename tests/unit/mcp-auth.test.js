@@ -1,13 +1,32 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { express, startServer, createMcpClient } = require('./mcp-helpers')
+const os = require('os')
+const path = require('path')
+const fs = require('fs')
 
+// 指摘 2: app を require する前に DB_PATH を設定して本番の household.db を保護
+const tempDbPath = path.join(os.tmpdir(), `mcp-auth-test-${Date.now()}.db`)
+process.env.DB_PATH = tempDbPath
+
+const { express, startServer, createMcpClient } = require('./mcp-helpers')
 const app = require('../../server/app')
 const { createMcpRouter } = require('../../server/mcp')
 
 const VALID_TOKEN = 'test-mcp-valid-token-32-characters-long!'
 const INVALID_SAME_LEN = 'test-mcp-wrong-token-32-characters-long!'
 const INVALID_DIFF_LEN = 'wrong-token'
+
+test.after(() => {
+  try {
+    if (fs.existsSync(tempDbPath)) fs.unlinkSync(tempDbPath)
+    const wal = `${tempDbPath}-wal`
+    const shm = `${tempDbPath}-shm`
+    if (fs.existsSync(wal)) fs.unlinkSync(wal)
+    if (fs.existsSync(shm)) fs.unlinkSync(shm)
+  } catch {
+    // ignore cleanup error
+  }
+})
 
 test('A1: MCP_AUTH_TOKEN 未設定時 -> POST /mcp は 503, GET /api/health は 200', async () => {
   const originalToken = process.env.MCP_AUTH_TOKEN
@@ -34,7 +53,12 @@ test('A1: MCP_AUTH_TOKEN 未設定時 -> POST /mcp は 503, GET /api/health は 
     const healthBody = await healthRes.json()
     assert.equal(healthBody.status, 'ok')
   } finally {
-    process.env.MCP_AUTH_TOKEN = originalToken
+    // 指摘 4: undefined の場合は delete して文字列 "undefined" になるバグを防止
+    if (originalToken === undefined) {
+      delete process.env.MCP_AUTH_TOKEN
+    } else {
+      process.env.MCP_AUTH_TOKEN = originalToken
+    }
     await close()
   }
 })
@@ -154,6 +178,38 @@ test('A4: 正トークン -> SDK Client で initialize と tools/list が成功�
   }
 })
 
+test('A4-case: Authorization ヘッダーの小文字 bearer スキームも許容される', async () => {
+  process.env.MCP_AUTH_TOKEN = VALID_TOKEN
+
+  const testApp = express()
+  testApp.use('/mcp', createMcpRouter())
+  const { baseUrl, close } = await startServer(testApp)
+
+  try {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        Authorization: `bearer ${VALID_TOKEN}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'test', version: '1.0.0' },
+        },
+      }),
+    })
+    assert.equal(res.status, 200)
+  } finally {
+    await close()
+  }
+})
+
 test('A5: クエリオプトイン (MCP_ALLOW_QUERY_TOKEN)', async () => {
   process.env.MCP_AUTH_TOKEN = VALID_TOKEN
 
@@ -219,7 +275,7 @@ test('A5: クエリオプトイン (MCP_ALLOW_QUERY_TOKEN)', async () => {
   }
 })
 
-test('A6: GET /mcp および DELETE /mcp は 405 Method Not Allowed', async () => {
+test('A6: GET /mcp および DELETE /mcp は 405 Method Not Allowed (Allow: POST ヘッダー & コード -32000)', async () => {
   process.env.MCP_AUTH_TOKEN = VALID_TOKEN
 
   const testApp = express()
@@ -231,13 +287,15 @@ test('A6: GET /mcp および DELETE /mcp は 405 Method Not Allowed', async () =
 
     const getRes = await fetch(`${baseUrl}/mcp`, { method: 'GET', headers })
     assert.equal(getRes.status, 405)
+    assert.equal(getRes.headers.get('allow'), 'POST')
     const getBody = await getRes.json()
-    assert.equal(getBody.error.code, -32601)
+    assert.equal(getBody.error.code, -32000)
 
     const deleteRes = await fetch(`${baseUrl}/mcp`, { method: 'DELETE', headers })
     assert.equal(deleteRes.status, 405)
+    assert.equal(deleteRes.headers.get('allow'), 'POST')
     const delBody = await deleteRes.json()
-    assert.equal(delBody.error.code, -32601)
+    assert.equal(delBody.error.code, -32000)
   } finally {
     await close()
   }
@@ -284,6 +342,40 @@ test('A7: 15分間に認証失敗10回で11回目は429 Too Many Requests (正�
     assert.equal(body11.error.code, -32000)
   } finally {
     console.warn = originalWarn
+    await close()
+  }
+})
+
+test('A7-reg: 正トークンで 11 回以上連続してリクエストしても 429 にならず正常接続できる (指摘 1 回帰テスト)', async () => {
+  process.env.MCP_AUTH_TOKEN = VALID_TOKEN
+
+  const testApp = express()
+  testApp.use('/mcp', createMcpRouter())
+  const { baseUrl, close } = await startServer(testApp)
+
+  try {
+    for (let i = 1; i <= 15; i++) {
+      const res = await fetch(`${baseUrl}/mcp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+          Authorization: `Bearer ${VALID_TOKEN}`,
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: i,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2024-11-05',
+            capabilities: {},
+            clientInfo: { name: 'test', version: '1.0.0' },
+          },
+        }),
+      })
+      assert.equal(res.status, 200, `Request ${i} should be 200`)
+    }
+  } finally {
     await close()
   }
 })
