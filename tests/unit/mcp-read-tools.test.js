@@ -97,12 +97,13 @@ test('P1-1: tools/list で 7 つの参照系ツールが登録され、すべて
     ]
 
     const actualToolNames = list.tools.map((t) => t.name)
-    assert.equal(actualToolNames.length, 7)
     for (const expected of expectedToolNames) {
       assert.ok(actualToolNames.includes(expected), `Tool ${expected} should be listed`)
     }
 
-    for (const tool of list.tools) {
+    const readTools = list.tools.filter((t) => expectedToolNames.includes(t.name))
+    assert.equal(readTools.length, 7)
+    for (const tool of readTools) {
       assert.ok(tool.annotations, `Tool ${tool.name} should have annotations`)
       assert.equal(
         tool.annotations.readOnlyHint,
