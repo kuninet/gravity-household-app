@@ -301,11 +301,12 @@ test('A6: GET /mcp および DELETE /mcp は 405 Method Not Allowed (Allow: POST
   }
 })
 
-test('A7: 15分間に認証失敗10回で11回目は429 Too Many Requests (正トークンでも429)', async () => {
+test('A7: 15分間に認証失敗10回で11回目は429 Too Many Requests (正トークンでも429、リセット後に回復)', async () => {
   process.env.MCP_AUTH_TOKEN = VALID_TOKEN
 
+  const testRouter = createMcpRouter()
   const testApp = express()
-  testApp.use('/mcp', createMcpRouter())
+  testApp.use('/mcp', testRouter)
   const { baseUrl, close } = await startServer(testApp)
 
   // console.warn を抑制
@@ -340,13 +341,38 @@ test('A7: 15分間に認証失敗10回で11回目は429 Too Many Requests (正�
     assert.equal(res11.status, 429)
     const body11 = await res11.json()
     assert.equal(body11.error.code, -32000)
+
+    // リセット（窓経過シミュレーション）後に正常回復することを確認
+    await testRouter.authFailLimiter.resetKey('127.0.0.1')
+    await testRouter.authFailLimiter.resetKey('::ffff:127.0.0.1')
+    await testRouter.authFailLimiter.resetKey('::1')
+
+    const resRecover = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        Authorization: `Bearer ${VALID_TOKEN}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 12,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'test', version: '1.0.0' },
+        },
+      }),
+    })
+    assert.equal(resRecover.status, 200, 'Should recover to 200 after window reset')
   } finally {
     console.warn = originalWarn
     await close()
   }
 })
 
-test('A7-reg: 正トークンで 11 回以上連続してリクエストしても 429 にならず正常接続できる (指摘 1 回帰テスト)', async () => {
+test('A7-reg: GET /mcp (405) を12回挟んだ後でも正トークンでの POST /mcp が 429 にならず 200 で成功する (405 が認証失敗にカウントされないことの証明)', async () => {
   process.env.MCP_AUTH_TOKEN = VALID_TOKEN
 
   const testApp = express()
@@ -354,7 +380,19 @@ test('A7-reg: 正トークンで 11 回以上連続してリクエストして�
   const { baseUrl, close } = await startServer(testApp)
 
   try {
-    for (let i = 1; i <= 15; i++) {
+    // 1. GET /mcp (405) を 12 回連続で実行（正トークンあり）
+    for (let i = 1; i <= 12; i++) {
+      const getRes = await fetch(`${baseUrl}/mcp`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${VALID_TOKEN}`,
+        },
+      })
+      assert.equal(getRes.status, 405, `GET ${i} should be 405`)
+    }
+
+    // 2. その後でも正トークンでの POST /mcp は 429 にならず 200 で成功する
+    for (let i = 1; i <= 5; i++) {
       const res = await fetch(`${baseUrl}/mcp`, {
         method: 'POST',
         headers: {
@@ -373,7 +411,7 @@ test('A7-reg: 正トークンで 11 回以上連続してリクエストして�
           },
         }),
       })
-      assert.equal(res.status, 200, `Request ${i} should be 200`)
+      assert.equal(res.status, 200, `POST ${i} after GETs should be 200`)
     }
   } finally {
     await close()
