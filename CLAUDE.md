@@ -34,9 +34,12 @@ node scripts/run-e2e.js -g "テスト名の部分一致"
 
 # フロントエンドのビルド確認
 npm run build --prefix client
+
+# バックエンド単体テスト（Node 標準の node:test、MCP・認証・共通ライブラリ）
+npm run test:unit
 ```
 
-サーバー単体の自動テストは薄いため、API 変更時は該当ルートの手動確認か E2E 追加を検討します。
+API 変更時はバックエンド単体テスト（npm run test:unit）や E2E テストの実行・追加を検討します。
 
 ## アーキテクチャの要点
 
