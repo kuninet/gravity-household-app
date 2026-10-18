@@ -6,7 +6,7 @@ const {
 const { mcpAuth } = require('./auth')
 const { createMcpServer } = require('./server')
 
-function createMcpRouter() {
+function createMcpRouter(db) {
   const router = express.Router()
 
   // 1. /mcp 専用の body parser (上限 1MB)
@@ -83,7 +83,7 @@ function createMcpRouter() {
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
       })
-      const server = createMcpServer()
+      const server = createMcpServer(db)
 
       res.on('close', () => {
         transport.close()
