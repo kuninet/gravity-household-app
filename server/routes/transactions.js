@@ -19,7 +19,8 @@ function getFiscalMonth(dateStr) {
   return `${year}-${String(month).padStart(2, '0')}`
 }
 
-const FIXED_COST_CODES = [604, 601, 603, 606, 602, 605, 607, 901, 608]
+const { EXPENSE_FIXED_CODES } = require('../lib/fixedCostCodes')
+const FIXED_COST_CODES = EXPENSE_FIXED_CODES
 
 // Get transactions (optional filter by fiscal_month)
 router.get('/', (req, res) => {
