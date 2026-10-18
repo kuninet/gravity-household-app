@@ -2,10 +2,13 @@ require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
 const bodyParser = require('body-parser')
-const db = require('./db')
+require('./db')
 
 const app = express()
 const PORT = process.env.PORT || 3001
+
+// MCP router (mounted before global bodyParser/cors so it has custom body limit and no browser CORS)
+app.use('/mcp', require('./mcp'))
 
 // Middleware
 app.use(cors())
@@ -33,6 +36,10 @@ app.get('/api/health', (req, res) => {
 })
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`)
-})
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`)
+  })
+}
+
+module.exports = app
