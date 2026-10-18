@@ -11,6 +11,7 @@ Excelでの家計管理から移行するために開発された、Webベース
 - **集計・可視化**: カテゴリ別の支出や月次推移をグラフ（Chart.js）や集計表で確認できます。
 - **品名価格推移（物価分析）**: 「納豆」「牛乳」「卵」などキーワードで過去の支出を横断抽出し、価格推移グラフとサマリーを表示。TypeSafe AIの「Jev」モデルと連携したAIスマート抽出（表記揺れ吸収）に対応。
 - **固定入力（収入・支出）**: 家賃・光熱費などの固定支出と給与収入をマトリクスで一括管理できます。給与は 1 会計月に複数明細を登録でき、給与セルをクリックすると明細モーダルが開いて追加・編集・削除ができます。
+- **リモート MCP サーバー**: 外部の AI クライアントから家計簿の参照・登録（参照 7 ツール / 更新 4 ツール）を行えます。
 - **家計簿期間**: 毎月23日から翌月22日を1ヶ月として集計します。
 
 ## 技術スタック
@@ -29,6 +30,9 @@ Excelでの家計管理から移行するために開発された、Webベース
 - Node.js
 - Express
 - SQLite3
+- @modelcontextprotocol/sdk: Model Context Protocol サーバー実装 (Streamable HTTP)
+- express-rate-limit: API レート制限
+- zod: 入出力バリデーションスキーマ
 
 ## セットアップ手順
 
@@ -86,6 +90,158 @@ Windows PC 上で Gravity を常時起動しておきたい場合、[NSSM](https
 - **実行ユーザー**: 各バッチはサービス登録時と同じユーザーで、管理者に昇格して実行してください。別ユーザーで実行すると、git のリポジトリ所有権チェックや資格情報が一致せず失敗することがあります。
 - **更新時の再起動**: `household_service_update.bat` は `git pull` で更新が無かった場合（`Already up to date`）でも、サービスの再起動自体は必ず行います。プロセスを立ち上げ直したいだけのときにもそのまま実行できます。
 
+## リモート MCP サーバー
+
+外部の AI クライアント（Claude Code や Cursor 等）から家計簿データを安全に参照・更新できるリモート MCP (Model Context Protocol) サーバーを提供しています。
+
+### 概要
+
+- **エンドポイント**: `POST /mcp`（バックエンドの Express ポート `3001` へ直接接続。Vite 開発プロキシは経由しません）
+- **プロトコル方式**: Streamable HTTP（ステートレス、セッション ID なし、POST メソッドのみ、レスポンスは常に JSON 形式）
+- **公開ツール**: 参照系 7 ツール、更新系 4 ツール（計 11 ツール）。各ツールの引数仕様や固定費保護ルール等の詳細は [docs/specifications.md](docs/specifications.md#7-リモート-mcp-サーバーservermcp) を参照してください。
+
+### 有効化手順
+
+#### 1. 認証トークンの生成
+
+16 文字以上の安全な乱数トークンを生成します（32 バイトの hex 文字列 = 64 文字を推奨）。
+
+- **Node.js（推奨・全 OS 共通）**:
+  ```bash
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  ```
+- **OpenSSL（Mac / Linux / Git Bash）**:
+  ```bash
+  openssl rand -hex 32
+  ```
+- **PowerShell（Windows）**:
+  ```powershell
+  $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); -join ($b | ForEach-Object { $_.ToString('x2') })
+  ```
+
+#### 2. 環境変数の設定
+
+`server/.env` に生成したトークンを設定します。未設定または 16 文字未満の場合はエンドポイントが無効化（HTTP 503）されます。
+
+```dotenv
+MCP_AUTH_TOKEN=your_generated_token_here
+```
+
+#### 3. サーバーの再起動
+
+- **開発時**: `npm run server`（または `npm run dev`）を再起動します。
+- **Windows サービス時**: `household_service_update.bat` を実行してサービスを再起動します。
+
+#### 4. 動作確認
+
+curl または PowerShell でツール一覧の取得をテストします（実行前に `export MCP_AUTH_TOKEN=your_token` または `$env:MCP_AUTH_TOKEN="your_token"` で環境変数を設定するか、ヘッダーに直接トークン文字列を指定してください）。
+
+- **bash / zsh**:
+  ```bash
+  curl -s -X POST http://localhost:3001/mcp \
+    -H "Authorization: Bearer $MCP_AUTH_TOKEN" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+  ```
+- **PowerShell**:
+  ```powershell
+  $headers = @{
+    "Authorization" = "Bearer $env:MCP_AUTH_TOKEN"
+    "Content-Type"  = "application/json"
+    "Accept"        = "application/json, text/event-stream"
+  }
+  $body = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+  Invoke-RestMethod -Uri "http://localhost:3001/mcp" -Method Post -Headers $headers -Body $body
+  ```
+
+正常に接続できると、11 種類のツール一覧（JSON 形式）が返却されます。
+
+### クライアント接続設定
+
+トークン文字列を設定ファイルに直接コミットしないよう、環境変数を参照する形式を推奨します。
+
+> 💡 **推奨設定**: プロジェクト直下の `.mcp.json` に環境変数参照（`${GRAVITY_MCP_TOKEN}`）を記述する方法を推奨します。CLI コマンド（`claude mcp add`）を使用すると、シェルの変数展開によってグローバル設定ファイル（`~/.claude.json`）内にトークン平文が直接保存されてしまうため注意してください。
+
+#### Claude Code (プロジェクト共有 `.mcp.json` 【推奨】)
+
+```json
+{
+  "mcpServers": {
+    "gravity": {
+      "type": "http",
+      "url": "http://localhost:3001/mcp",
+      "headers": {
+        "Authorization": "Bearer ${GRAVITY_MCP_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+#### Claude Code (CLI)
+
+```bash
+# 注意: シェル展開により ~/.claude.json にトークン実値が保存されます
+claude mcp add --transport http gravity http://localhost:3001/mcp \
+  --header "Authorization: Bearer ${GRAVITY_MCP_TOKEN}"
+```
+
+#### Cursor (`~/.cursor/mcp.json` または `.cursor/mcp.json`)
+
+```json
+{
+  "mcpServers": {
+    "gravity": {
+      "url": "http://localhost:3001/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:GRAVITY_MCP_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+#### ヘッダーを設定できないクライアント（クエリ認証）
+
+Authorization ヘッダーを指定できないクライアントを利用する場合は、`server/.env` で `MCP_ALLOW_QUERY_TOKEN=true` を設定し、`http://localhost:3001/mcp?token=<token>` 形式で接続できます。ただし URL 中のトークンはアクセスログ等に残るため、通常運用ではヘッダー認証（`false`）を推奨します。
+
+### 外部公開（トンネル）時の注意
+
+> [!CAUTION]
+> **重大なセキュリティリスク: ポート全体のトンネル公開は厳禁**
+>
+> `cloudflared tunnel --url http://localhost:3001` のようにポート全体をトンネル公開すると、認証のない既存 `/api/*`（`/api/backup/restore` などの破壊的 API や `/api/transactions` 等の個人データ API）までインターネット上に無防備に公開されてしまいます。データ漏洩・破壊・改ざんの重大な危険があるため、ポート全体の公開は絶対に行わないでください。外部公開する際は、必ずトンネルやリバースプロキシで **`/mcp` パスのみを転送対象** としてください。
+
+- **`/mcp` のみ転送するトンネル設定例 (Cloudflare Tunnel)**:
+  設定ファイル（`config.yml`）の ingress ルールで `/mcp` のみを転送し、それ以外のすべてのパスを 404 で遮断します。
+  ```yaml
+  tunnel: <YOUR-TUNNEL-ID>
+  credentials-file: /path/to/<YOUR-TUNNEL-ID>.json
+
+  ingress:
+    # /mcp のみをローカルの Express サーバーへ転送
+    - hostname: mcp.example.com
+      path: ^/mcp$
+      service: http://localhost:3001
+    # それ以外のパス（/api/* や Web 画面など）はすべて 404 で遮断
+    - service: http_status:404
+  ```
+- **リバースプロキシによる限定公開例 (nginx)**:
+  nginx などを経由して `/mcp` のみを外部公開し、HTTPS 終端を行うことも可能です。
+  ```nginx
+  location = /mcp {
+      proxy_pass http://localhost:3001/mcp;
+      proxy_http_version 1.1;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+  }
+  ```
+- **一時トンネル（--url）の注意点**: `cloudflared tunnel --url ...` などのクイックトンネルは起動ごとにランダムなサブドメインが割り当てられるため、固定設定が必要な `server/.env` の `MCP_ALLOWED_HOSTS` と不整合になり `403 Host not allowed` が発生します。外部公開には固定ドメイン（上記 config.yml 形式）を使用してください。
+- **Host 検証**: トンネル公開時は `server/.env` の `MCP_ALLOWED_HOSTS` に許可ホスト名（例: `localhost,127.0.0.1,mcp.example.com`）を指定し、DNS リバインディング攻撃を防止してください。
+- **レート制限と共有 IP**: トンネル経由では全リクエストが同一のローカル IP として集約されます。誤設定のクライアントによる認証失敗（15分間に10回）が発生すると、同一 IP 全体に 429 レート制限が適用されます。サーバーを再起動するとカウンタはリセットされます。
+- **更新系ツールの承認**: 更新系ツールは実データを変更・削除します。`delete_transaction` は `confirm: true` が必須ですが、クライアント側でもツール実行前の人間による承認確認を有効にしておくことを推奨します。
+
 ## ディレクトリ構成
 
 - `client/`: フロントエンド (Vue.js) のソースコード
@@ -98,10 +254,15 @@ Windows PC 上で Gravity を常時起動しておきたい場合、[NSSM](https
 
 ### `server/.env`
 
-| 変数名           | デフォルト値 | 説明                                     |
-| ---------------- | ------------ | ---------------------------------------- |
-| `PORT`           | `3001`       | バックエンドAPIサーバーのポート番号      |
-| `GEMINI_API_KEY` | ―            | Gemini API キー（レシートOCR機能で使用） |
+| 変数名                  | デフォルト値          | 説明                                                                       |
+| ----------------------- | --------------------- | -------------------------------------------------------------------------- |
+| `PORT`                  | `3001`                | バックエンド API サーバーのポート番号                                      |
+| `GEMINI_API_KEY`        | ―                     | Gemini API キー（レシート OCR 機能で使用）                                 |
+| `TYPESAFE_API_KEY`      | ―                     | TypeSafe AI API キー（Jev による品名判定・価格推移分析で使用）             |
+| `MCP_AUTH_TOKEN`        | ―（無効）             | リモート MCP の Bearer 認証トークン（未設定または 16 文字未満で MCP 無効） |
+| `MCP_ALLOW_QUERY_TOKEN` | `false`               | `true` のとき `?token=<token>` クエリ認証を許可                            |
+| `MCP_ALLOWED_HOSTS`     | ―（無制限）           | 許可する Host ヘッダー（カンマ区切り、DNS リバインディング対策）           |
+| `DB_PATH`               | `server/household.db` | SQLite データベースファイルのパス（通常は変更不要）                        |
 
 ### `client/.env`
 
@@ -114,8 +275,11 @@ Windows PC 上で Gravity を常時起動しておきたい場合、[NSSM](https
 
 ## 開発用コマンド
 
+- `npm run dev`: サーバーとクライアントを同時に起動
 - `npm run server`: サーバーのみを起動
 - `npm run client`: クライアントのみを起動
+- `npm run test:unit`: MCP サーバーやユーティリティを含む単体テストを実行
+- `npm run test:e2e`: Playwright による E2E テストを実行
 
 ### レシート入れ忘れチェック
 

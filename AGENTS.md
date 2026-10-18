@@ -18,7 +18,7 @@ PR のタイトル・本文、Issue、コミットメッセージ、AGENTS.md、
 家計簿アプリ Gravity は、Excel での家計管理から移行するための Web アプリです。
 
 - フロントエンド: `client/` の Vue 3 + Vite SPA
-- バックエンド: `server/` の Node.js + Express API
+- バックエンド: `server/` の Node.js + Express API（外部 AI クライアント向けのリモート MCP サーバー `/mcp` を同居）
 - データベース: `server/household.db` の SQLite
 - 開発時の通信: Vite の `/api` プロキシ経由で Express に転送
 - 主要ドキュメント: `README.md`, `docs/architecture.md`, `docs/specifications.md`, `docs/user_manual.md`, `docs/troubleshooting.md`
@@ -34,7 +34,10 @@ PR のタイトル・本文、Issue、コミットメッセージ、AGENTS.md、
 - `server/app.js`: Express アプリと API ルート登録
 - `server/db.js`: SQLite 接続と基本スキーマ作成
 - `server/routes/`: API エンドポイント群
-- `server/lib/`: レシート照合ロジック（`receiptMatcher.js`）。`scripts/check-receipts.js`（CLI）と `server/routes/receipts.js`（API）が共有する
+- `server/mcp/`: リモート MCP サーバーの実装（認証、Streamable HTTP トランスポート、ツール定義、Zod スキーマ）
+- `server/lib/`: 共通ライブラリ。会計月計算（`fiscalMonth.js`）、固定費コード判定（`fixedCostCodes.js`）、レシート照合ロジック（`receiptMatcher.js`）など
+- `server/services/`: 取引明細や集計などのデータ操作・ビジネスロジック層
+- `tests/unit/`: Node 標準の `node:test` による単体テスト群（MCP ツール、認証、共通ライブラリ）
 - `tests/e2e/`: Playwright E2E テスト
 
 ## 重要な仕様
@@ -52,6 +55,12 @@ PR のタイトル・本文、Issue、コミットメッセージ、AGENTS.md、
 - 割引、値引き、クーポンなどのマイナス金額は有効な支出明細として保存し、常に税込扱いにしてください。税抜モードでもマイナス金額に税率を掛けないでください。
 - バックアップ CSV は Excel で扱いやすいよう Shift_JIS で出力されます。
 - Excel インポートやリストアは既存データを削除・上書きする経路があります。実データで試す前に必ずバックアップを取ってください。
+- `/mcp` は Bearer 認証です。`MCP_AUTH_TOKEN` 未設定または 16 文字未満の場合は 503（fail-closed）を返します。
+- 外部公開（トンネルやリバースプロキシ）時は、ポート 3001 全体を公開すると認証のない既存 `/api/*` が無防備に公開されるため、必ず `/mcp` のみ転送対象に限定してください。
+- MCP の更新系ツールは固定費・給与（EXPENSE 601〜608/901、INCOME 700）を登録・更新・削除できません。ガードは `server/lib/fixedCostCodes.js` の `isFixedCost(code, type)` で判定します。
+- `create_transactions_batch` は全件検証後に単一トランザクションで登録するため、1 件でも検証エラーがあると全体がロールバックされます（部分登録なし）。
+- 取引データの `fiscal_month` は、MCP 経由の登録・更新時も `server/lib/fiscalMonth.js` により日付から自動計算されます。
+- `MCP_AUTH_TOKEN` などのトークン実値をログ・コミット・Issue・PR に絶対に記載しないでください。
 
 ## セットアップと起動
 
@@ -81,6 +90,14 @@ npm run dev
 
 変更内容に応じて、必要な範囲で実行してください。
 
+バックエンド単体テスト（MCP ツール、認証、共通ライブラリ）:
+
+```bash
+npm run test:unit
+```
+
+E2E テスト・開発実行:
+
 ```bash
 npm run test:e2e
 npm run test:e2e:discount
@@ -97,11 +114,10 @@ E2E を追加・変更するときは、`tests/e2e/` 配下に再実行可能な
 npm run build --prefix client
 ```
 
-バックエンドには専用の自動テストがまだ薄いため、API 変更時は該当ルートの手動確認や E2E 追加を検討してください。
-
 ## 実行生成物と秘密情報
 
 - `.env` はローカル設定です。API キーや秘密情報をコミットしないでください。
+- `MCP_AUTH_TOKEN` やクライアント設定ファイル（`.mcp.json` 等）にトークン実値を直書きしてコミットしないでください。環境変数参照（`${GRAVITY_MCP_TOKEN}`）を利用します。
 - `server/household.db`、SQLite の WAL/SHM ファイル、`uploads/`、Playwright のレポート類は実行生成物として扱います。
 - 実データを含む CSV、Excel、DB ファイルを追加しないでください。
 
@@ -109,6 +125,8 @@ npm run build --prefix client
 
 - UI 変更では、`client/src/App.vue` と関連コンポーネントの状態更新が崩れていないか確認してください。
 - API 変更では、`client/src/api.js` の呼び出し側と `server/routes/` のレスポンス形を合わせてください。
+- MCP ツールの名前・入力スキーマ・出力形式を変更した場合は、同じ PR で `docs/specifications.md` §7 を更新してください。
+- 固定費コードを変更・追加する場合は、`client/src/components/FixedCostManager.vue`、`server/routes/fixed_costs.js` に加えて `server/lib/fixedCostCodes.js` も同期してください。
 - DB スキーマを変える場合は、既存の SQLite ファイル、シード、バックアップ/リストア、Excel インポートへの影響を確認してください。
 - 破壊的操作を含む機能は、ユーザーに確認を求める UI とバックアップ導線を維持してください。
 - README や `docs/` と実装が食い違う変更をした場合は、同じ PR でドキュメントも更新してください。
