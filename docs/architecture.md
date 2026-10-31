@@ -176,8 +176,10 @@ sequenceDiagram
   alt 不許可 / 超過
     R-->>C: 403 / 429
   end
-  R->>A: トークン検証・認証失敗レート制限
-  alt トークン未設定
+  R->>A: 認証モード判定・トークン検証・認証失敗レート制限
+  alt MCP_AUTH_MODE=none
+    Note over A: トークン検証をスキップ
+  else トークン未設定 (token モード)
     A-->>C: 503
   else トークン不一致 / 失敗超過
     A-->>C: 401 / 429

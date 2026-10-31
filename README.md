@@ -121,7 +121,7 @@ Windows PC 上で Gravity を常時起動しておきたい場合、[NSSM](https
 
 #### 2. 環境変数の設定
 
-`server/.env` に生成したトークンを設定します。未設定または 16 文字未満の場合はエンドポイントが無効化（HTTP 503）されます。
+`server/.env` に生成したトークンを設定します。未設定または 16 文字未満の場合はエンドポイントが無効化（HTTP 503）されます。認証方式の既定は `MCP_AUTH_MODE=token`（Bearer トークン認証）です。トークンを使わずに運用する場合は後述の「[トークンなしで使う](#トークンなしで使うmcp_auth_modenone)」を参照してください。
 
 ```dotenv
 MCP_AUTH_TOKEN=your_generated_token_here
@@ -155,7 +155,7 @@ curl または PowerShell でツール一覧の取得をテストします（実
   Invoke-RestMethod -Uri "http://localhost:3001/mcp" -Method Post -Headers $headers -Body $body
   ```
 
-正常に接続できると、11 種類のツール一覧（JSON 形式）が返却されます。
+正常に接続できると、11 種類のツール一覧（JSON 形式）が返却されます。`MCP_AUTH_MODE=none` で起動している場合は `Authorization` ヘッダーは不要です。
 
 ### クライアント接続設定
 
@@ -206,6 +206,23 @@ claude mcp add --transport http gravity http://localhost:3001/mcp \
 
 Authorization ヘッダーを指定できないクライアントを利用する場合は、`server/.env` で `MCP_ALLOW_QUERY_TOKEN=true` を設定し、`http://localhost:3001/mcp?token=<token>` 形式で接続できます。ただし URL 中のトークンはアクセスログ等に残るため、通常運用ではヘッダー認証（`false`）を推奨します。
 
+### トークンなしで使う（MCP_AUTH_MODE=none）
+
+claude.ai のカスタムコネクタなど、`Authorization` ヘッダーを付けられないクライアントから接続する場合は、`server/.env` で認証を明示的に無効化できます。既定は `MCP_AUTH_MODE=token`（トークン認証）で、`none` 以外の値（未設定・空・綴り誤り・`off` など）はすべてトークン必須として扱われます。
+
+```dotenv
+MCP_AUTH_MODE=none
+# 外部公開する場合は必ず Host 検証も併用してください
+MCP_ALLOWED_HOSTS=localhost,127.0.0.1,mcp.example.com
+```
+
+- `MCP_AUTH_MODE=none` のとき、`MCP_AUTH_TOKEN` の有無や `Authorization` ヘッダー・`?token` の内容にかかわらず、`/mcp` は 503 / 401 を返さず認証なしで処理します。Host 検証・全体レート制限・405 応答などは通常どおり有効です。
+- 起動時に `[MCP] 警告: MCP_AUTH_MODE=none のため /mcp は認証なしで公開されています。…` という警告ログが出力されます。なお `MCP_AUTH_MODE` に `token` / `none` 以外の値（綴り誤りなど）を設定すると、起動時に `[MCP] 警告: MCP_AUTH_MODE の値が不正なため token モードとして扱います。` が出力され、トークン認証で動作します。
+
+> [!CAUTION]
+> **`/mcp` の URL を知っている人は誰でも、家計簿の参照・更新ツール（`delete_transaction` を含む）を実行できます。**
+> 外部公開する場合は、Cloudflare Access や Tailscale 等の前段で接続元を必ず制限してください。あわせて、トンネルやリバースプロキシでは `/mcp` パスのみを転送し、`MCP_ALLOWED_HOSTS` を設定してください（詳細は次節）。接続元を制限できない環境では、既定のトークン認証を使用してください。
+
 ### 外部公開（トンネル）時の注意
 
 > [!CAUTION]
@@ -254,15 +271,16 @@ Authorization ヘッダーを指定できないクライアントを利用する
 
 ### `server/.env`
 
-| 変数名                  | デフォルト値          | 説明                                                                       |
-| ----------------------- | --------------------- | -------------------------------------------------------------------------- |
-| `PORT`                  | `3001`                | バックエンド API サーバーのポート番号                                      |
-| `GEMINI_API_KEY`        | ―                     | Gemini API キー（レシート OCR 機能で使用）                                 |
-| `TYPESAFE_API_KEY`      | ―                     | TypeSafe AI API キー（Jev による品名判定・価格推移分析で使用）             |
-| `MCP_AUTH_TOKEN`        | ―（無効）             | リモート MCP の Bearer 認証トークン（未設定または 16 文字未満で MCP 無効） |
-| `MCP_ALLOW_QUERY_TOKEN` | `false`               | `true` のとき `?token=<token>` クエリ認証を許可                            |
-| `MCP_ALLOWED_HOSTS`     | ―（無制限）           | 許可する Host ヘッダー（カンマ区切り、DNS リバインディング対策）           |
-| `DB_PATH`               | `server/household.db` | SQLite データベースファイルのパス（通常は変更不要）                        |
+| 変数名                  | デフォルト値          | 説明                                                                                                 |
+| ----------------------- | --------------------- | ---------------------------------------------------------------------------------------------------- |
+| `PORT`                  | `3001`                | バックエンド API サーバーのポート番号                                                                |
+| `GEMINI_API_KEY`        | ―                     | Gemini API キー（レシート OCR 機能で使用）                                                           |
+| `TYPESAFE_API_KEY`      | ―                     | TypeSafe AI API キー（Jev による品名判定・価格推移分析で使用）                                       |
+| `MCP_AUTH_MODE`         | `token`               | リモート MCP の認証方式（`token`: Bearer 認証 / `none`: 認証なし。不正値は `token` 扱い）            |
+| `MCP_AUTH_TOKEN`        | ―（無効）             | リモート MCP の Bearer 認証トークン（`MCP_AUTH_MODE=token` 時。未設定または 16 文字未満で MCP 無効） |
+| `MCP_ALLOW_QUERY_TOKEN` | `false`               | `true` のとき `?token=<token>` クエリ認証を許可                                                      |
+| `MCP_ALLOWED_HOSTS`     | ―（無制限）           | 許可する Host ヘッダー（カンマ区切り、DNS リバインディング対策）                                     |
+| `DB_PATH`               | `server/household.db` | SQLite データベースファイルのパス（通常は変更不要）                                                  |
 
 ### `client/.env`
 

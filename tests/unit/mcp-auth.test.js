@@ -8,9 +8,14 @@ const fs = require('fs')
 const tempDbPath = path.join(os.tmpdir(), `mcp-auth-test-${Date.now()}.db`)
 process.env.DB_PATH = tempDbPath
 
+// 実行環境の MCP_AUTH_MODE / MCP_ALLOWED_HOSTS に依存せず token モード前提で動かすため、事前に除去する
+delete process.env.MCP_AUTH_MODE
+delete process.env.MCP_ALLOWED_HOSTS
+
 const { express, startServer, createMcpClient } = require('./mcp-helpers')
 const app = require('../../server/app')
 const { createMcpRouter } = require('../../server/mcp')
+const { getMcpAuthMode } = require('../../server/mcp/auth')
 
 const VALID_TOKEN = 'test-mcp-valid-token-32-characters-long!'
 const INVALID_SAME_LEN = 'test-mcp-wrong-token-32-characters-long!'
@@ -471,6 +476,206 @@ test('A8: 1MB 超ボディで 413 Payload Too Large とサーバー継続稼働'
     })
     assert.equal(checkRes.status, 200)
   } finally {
+    await close()
+  }
+})
+
+// ===== 無認証モード (MCP_AUTH_MODE=none) =====
+
+const AUTH_ENV_KEYS = ['MCP_AUTH_MODE', 'MCP_AUTH_TOKEN', 'MCP_ALLOWED_HOSTS']
+
+/**
+ * 認証関連の環境変数を退避し、overrides を適用する。
+ * 戻り値の restore() で元に戻す（undefined だったものは delete して "undefined" 文字列化を防ぐ）
+ */
+function overrideAuthEnv(overrides) {
+  const saved = {}
+  for (const key of AUTH_ENV_KEYS) {
+    saved[key] = process.env[key]
+    delete process.env[key]
+  }
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value !== undefined) process.env[key] = value
+  }
+  return () => {
+    for (const key of AUTH_ENV_KEYS) {
+      if (saved[key] === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = saved[key]
+      }
+    }
+  }
+}
+
+const INITIALIZE_BODY = JSON.stringify({
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'initialize',
+  params: {
+    protocolVersion: '2024-11-05',
+    capabilities: {},
+    clientInfo: { name: 'test', version: '1.0.0' },
+  },
+})
+
+function postInitialize(baseUrl, extraHeaders = {}) {
+  return fetch(`${baseUrl}/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      ...extraHeaders,
+    },
+    body: INITIALIZE_BODY,
+  })
+}
+
+test('A9-mode: getMcpAuthMode は none のみ none、未設定・空・token・不正値は token', () => {
+  const restore = overrideAuthEnv({})
+  try {
+    assert.equal(getMcpAuthMode(), 'token')
+
+    const cases = [
+      ['none', 'none'],
+      ['NONE', 'none'],
+      ['  None  ', 'none'],
+      ['token', 'token'],
+      ['', 'token'],
+      ['   ', 'token'],
+      ['off', 'token'],
+      ['false', 'token'],
+      ['no', 'token'],
+      ['nonee', 'token'],
+    ]
+    for (const [input, expected] of cases) {
+      process.env.MCP_AUTH_MODE = input
+      assert.equal(getMcpAuthMode(), expected, `MCP_AUTH_MODE=${JSON.stringify(input)}`)
+    }
+  } finally {
+    restore()
+  }
+})
+
+test('A9: MCP_AUTH_MODE=none かつ MCP_AUTH_TOKEN 未設定 -> トークンなしで initialize / tools/list / callTool が成功し、app 本体でも 503 にならない', async () => {
+  const restore = overrideAuthEnv({ MCP_AUTH_MODE: 'none' })
+
+  const testApp = express()
+  testApp.use('/mcp', createMcpRouter())
+  const { baseUrl, close } = await startServer(testApp)
+  const appServer = await startServer(app)
+  let client
+
+  try {
+    // トークンなしの SDK Client
+    const mcp = await createMcpClient({ baseUrl })
+    client = mcp.client
+    const tools = await client.listTools()
+    const toolNames = tools.tools.map((t) => t.name)
+    assert.ok(toolNames.includes('get_fiscal_month'), 'get_fiscal_month tool exists')
+
+    const result = await client.callTool({
+      name: 'get_fiscal_month',
+      arguments: { date: '2026-10-23' },
+    })
+    assert.ok(!result.isError)
+    const parsed = JSON.parse(result.content[0].text)
+    assert.equal(parsed.fiscal_month, '2026-11')
+
+    // server/app 本体: A1 (503) の逆
+    const appRes = await postInitialize(appServer.baseUrl)
+    assert.equal(appRes.status, 200)
+  } finally {
+    if (client) await client.close()
+    restore()
+    await close()
+    await appServer.close()
+  }
+})
+
+test('A9-header: MCP_AUTH_MODE=none ならトークン設定済みで誤トークン・?token を付けても 401 にならない', async () => {
+  const restore = overrideAuthEnv({ MCP_AUTH_MODE: 'none', MCP_AUTH_TOKEN: VALID_TOKEN })
+
+  const testApp = express()
+  testApp.use('/mcp', createMcpRouter())
+  const { baseUrl, close } = await startServer(testApp)
+
+  try {
+    const res = await postInitialize(baseUrl, { Authorization: 'Bearer wrong' })
+    assert.equal(res.status, 200)
+
+    const resQuery = await fetch(`${baseUrl}/mcp?token=wrong`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: INITIALIZE_BODY,
+    })
+    assert.equal(resQuery.status, 200)
+  } finally {
+    restore()
+    await close()
+  }
+})
+
+test("A9-case: MCP_AUTH_MODE=' NONE ' (前後空白・大文字) でも無認証として動作する", async () => {
+  const restore = overrideAuthEnv({ MCP_AUTH_MODE: ' NONE ' })
+
+  const testApp = express()
+  testApp.use('/mcp', createMcpRouter())
+  const { baseUrl, close } = await startServer(testApp)
+
+  try {
+    const res = await postInitialize(baseUrl)
+    assert.equal(res.status, 200)
+  } finally {
+    restore()
+    await close()
+  }
+})
+
+test('A9-invalid: MCP_AUTH_MODE=off (不正値) は token 扱い -> トークン未設定は 503、設定済みでヘッダーなしは 401', async () => {
+  const restore = overrideAuthEnv({ MCP_AUTH_MODE: 'off' })
+
+  const testApp = express()
+  testApp.use('/mcp', createMcpRouter())
+  const { baseUrl, close } = await startServer(testApp)
+
+  try {
+    // トークン未設定 -> 503
+    const res503 = await postInitialize(baseUrl)
+    assert.equal(res503.status, 503)
+    assert.deepEqual(await res503.json(), { error: 'MCP is disabled' })
+
+    // トークン設定済み・ヘッダーなし -> 401
+    process.env.MCP_AUTH_TOKEN = VALID_TOKEN
+    const res401 = await postInitialize(baseUrl)
+    assert.equal(res401.status, 401)
+    assert.equal(res401.headers.get('www-authenticate'), 'Bearer realm="gravity-mcp"')
+  } finally {
+    restore()
+    await close()
+  }
+})
+
+test('A9-host: MCP_AUTH_MODE=none でも MCP_ALLOWED_HOSTS の Host 検証は有効 (許可外 Host は 403)', async () => {
+  const restore = overrideAuthEnv({
+    MCP_AUTH_MODE: 'none',
+    MCP_ALLOWED_HOSTS: 'allowed.example.com',
+  })
+
+  const testApp = express()
+  testApp.use('/mcp', createMcpRouter())
+  const { baseUrl, close } = await startServer(testApp)
+
+  try {
+    const res = await postInitialize(baseUrl)
+    assert.equal(res.status, 403)
+    const body = await res.json()
+    assert.equal(body.error.message, 'Host not allowed')
+  } finally {
+    restore()
     await close()
   }
 })
