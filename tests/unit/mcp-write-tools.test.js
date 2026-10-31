@@ -18,6 +18,9 @@ const TEST_TOKEN = 'test-mcp-valid-token-32-characters-long!'
  */
 async function setupTestEnvironment() {
   process.env.MCP_AUTH_TOKEN = TEST_TOKEN
+  // 実行環境の設定に依存せず token モード・Host 検証なしで動かす
+  delete process.env.MCP_AUTH_MODE
+  delete process.env.MCP_ALLOWED_HOSTS
 
   const { db, cleanup } = await createTempDb()
   const dbAsync = createDbAsync(db)
