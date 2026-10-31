@@ -138,17 +138,24 @@ Gemini API (AI) を使用して、レシート画像やPDFから品目と金額�
 
 ### 7.2 認証とアクセス制御
 
-1. **Bearer トークン認証**:
+1. **認証モード（`MCP_AUTH_MODE`）**:
+   - `server/.env` の `MCP_AUTH_MODE` で認証方式を切り替えます。値は前後の空白を除去し小文字化して判定し、`none` のときだけ認証なし、それ以外（未設定・空・`token`・不正値）はすべて `token`（Bearer トークン認証）として扱います（fail-closed 設計）。
+   - `token`（既定）: 以降の 2・3 に示す Bearer トークン認証（および任意でクエリ認証）を行います。
+   - `none`: 認証を行わず、`MCP_AUTH_TOKEN` の有無・`Authorization` ヘッダー・`?token` の内容にかかわらず **503 / 401 を返しません**。claude.ai のカスタムコネクタなど、ヘッダーを付与できないクライアント向けの明示オプトインです。
+   - `none` でも Host ヘッダー検証（`MCP_ALLOWED_HOSTS`）・全体レート制限・405 応答・エラーハンドラは通常どおり有効です。認証なしで参照・更新ツールが実行できるため、外部公開時は Cloudflare Access / Tailscale 等で接続元を制限してください。起動時に警告ログ（`[MCP] 警告: MCP_AUTH_MODE=none のため …`）を出力します。また `MCP_AUTH_MODE` が `token` / `none` 以外の不正値のときは、`[MCP] 警告: MCP_AUTH_MODE の値が不正なため token モードとして扱います。` を出力します（値自体はログに出しません）。
+   - 環境変数はリクエスト毎に参照します。
+2. **Bearer トークン認証（`MCP_AUTH_MODE=token`）**:
    - `Authorization: Bearer <token>` ヘッダーによる認証（`Bearer` スキームは大文字小文字を区別しません）。
    - SHA-256 ダイジェストを計算し、`crypto.timingSafeEqual` による定数時間比較を行うことでタイミング攻撃を防止します。トークン文字列はログに出力されません。
    - `server/.env` の `MCP_AUTH_TOKEN` が未設定または 16 文字未満の場合、エンドポイントは完全に無効化され **HTTP 503** を返します（fail-closed 設計）。
-2. **クエリパラメータ認証（オプトイン）**:
+3. **クエリパラメータ認証（オプトイン、`MCP_AUTH_MODE=token` 時）**:
    - `MCP_ALLOW_QUERY_TOKEN=true` が設定されている場合のみ、URL クエリ `?token=<token>` による認証を許可します。Authorization ヘッダーが同時に指定されている場合はヘッダーを優先します。URL にトークンが含まれるとログに残るリスクがあるため、通常は `false` を推奨します。
-3. **Host ヘッダー検証**:
+4. **Host ヘッダー検証**:
    - `server/.env` の `MCP_ALLOWED_HOSTS` にカンマ区切りで許可ホスト名（例: `localhost,gravity.example.com`）が設定されている場合、リクエストの Host ヘッダー（ポート番号有無無視、大文字小文字無視）を照合し、不一致時は **HTTP 403** で拒否します（DNS リバインディング攻撃対策）。未設定時は Host 検証を行いません。
-4. **レート制限 (Rate Limiting)**:
+5. **レート制限 (Rate Limiting)**:
    - **全体リクエスト制限**: 同一 IP から 1 分間に最大 120 リクエスト。超過時は **HTTP 429**。
    - **認証失敗レート制限**: 同一 IP から 15 分間に認証失敗（HTTP 401）が 10 回発生した場合、以降 15 分間は正しいトークンであっても **HTTP 429** で即時遮断します。
+   - `MCP_AUTH_MODE=none` では 401 が発生しないため、認証失敗レート制限は作動しません（全体リクエスト制限は有効）。
    - ※ レート制限カウンタはインメモリ保持のため、サーバー再起動で即座にリセットされます。
 
 ### 7.3 共通仕様
@@ -667,8 +674,8 @@ MCP ツールが実行される前のリクエスト検証・トランスポー�
 
 | HTTP ステータス                | レスポンスボディ                                                                                                                                 | 発生条件                                                                     |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| **503 Service Unavailable**    | `{"error":"MCP is disabled"}`                                                                                                                    | `MCP_AUTH_TOKEN` が未設定、または16文字未満                                  |
-| **401 Unauthorized**           | `{"error":"Unauthorized"}`（`WWW-Authenticate: Bearer realm="gravity-mcp"` ヘッダー付与）                                                        | トークン未指定、または不一致                                                 |
+| **503 Service Unavailable**    | `{"error":"MCP is disabled"}`                                                                                                                    | `MCP_AUTH_MODE=token` 時に `MCP_AUTH_TOKEN` が未設定、または16文字未満       |
+| **401 Unauthorized**           | `{"error":"Unauthorized"}`（`WWW-Authenticate: Bearer realm="gravity-mcp"` ヘッダー付与）                                                        | `MCP_AUTH_MODE=token` 時にトークン未指定、または不一致                       |
 | **403 Forbidden**              | `{"jsonrpc":"2.0","error":{"code":-32000,"message":"Host not allowed"},"id":null}`                                                               | `MCP_ALLOWED_HOSTS` の不一致                                                 |
 | **429 Too Many Requests**      | `{"jsonrpc":"2.0","error":{"code":-32000,"message":"Too many requests"},"id":null}`                                                              | 全体レート制限（120 req/分）超過                                             |
 | **429 Too Many Requests**      | `{"jsonrpc":"2.0","error":{"code":-32000,"message":"Too many authentication failures"},"id":null}`                                               | 認証失敗レート制限（15分間に10回失敗）超過                                   |
