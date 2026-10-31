@@ -50,7 +50,7 @@ Gemini API (AI) を使用して、レシート画像やPDFから品目と金額�
 ### 保存レコードの仕様
 
 - 支出は現行踏襲で、`description` は「固定費入力」。
-- 収入（給与）は `description` を「給与(固定入力)」（未指定時）とし、`date` はその `fiscal_month` に必ず含まれる **前月 25 日** を格納します（例: `fiscal_month=2026-09` なら `date=2026-08-25`）。`getFiscalMonth(date)` と `fiscal_month` が整合する側の日付を採用しています。日付決定はサーバー側 `resolveInsertDate` に集約されています。
+- 収入（給与）は `description` を「給与(固定入力)」（未指定時）とし、`date` はその `fiscal_month` に必ず含まれる **前月 25 日** を格納します（例: `fiscal_month=2026-09` なら `date=2026-08-25`）。`getFiscalMonth(date)` と `fiscal_month` が整合する側の日付を採用しています。日付決定はサーバー側 `resolveInsertDate`（`server/services/fixedCostService.js`）に集約されています。
 
 ### API
 
@@ -59,6 +59,7 @@ Gemini API (AI) を使用して、レシート画像やPDFから品目と金額�
 - `POST /api/fixed_costs/salary`: 給与明細を 1 件追加。body は `{ year, month, amount, description? }`。`date` は `resolveInsertDate` により「前月 25 日」に固定されます。
 - `PUT /api/fixed_costs/salary/:id`: 給与明細の `amount` と `description` を更新。`date` / `fiscal_month` は保持され、月の付け替えは削除＋追加で行う想定です。対象が給与行でなければ 404。
 - `DELETE /api/fixed_costs/salary/:id`: 給与明細を削除。対象が給与行でなければ 404。
+- `update_cell` と給与専用エンドポイントの書き込みロジックは `server/services/fixedCostService.js`（`setFixedCostCell` / `addSalaryItem` / `updateSalaryItem` / `deleteSalaryItem`）に集約され、リモート MCP の固定費・給与専用ツール（§7.5 の 5〜8）と共有しています。`update_cell` のセル upsert は直列化キュー＋専用接続＋`BEGIN IMMEDIATE` で実行され、同時実行でも同じセルに重複行を作りません。
 
 ### Excelペースト機能
 
@@ -134,7 +135,7 @@ Gemini API (AI) を使用して、レシート画像やPDFから品目と金額�
 - **サーバーメタ情報**:
   - `name`: `gravity-household-app`
   - `version`: `1.0.0`
-- **公開ツール**: 参照系 7 ツール、更新系 4 ツール（計 11 ツール）
+- **公開ツール**: 参照系 7 ツール、更新系 8 ツール（汎用 4 ツール＋固定費・給与の専用 4 ツール、計 15 ツール）
 
 ### 7.2 認証とアクセス制御
 
@@ -194,9 +195,10 @@ MCP プロトコル仕様に準拠し、すべてのツール実行結果は以�
 すべての入力引数は Zod スキーマにより検証されます。
 
 - **日付 (`date`, `from`, `to`)**: `YYYY-MM-DD` 形式（月: 01〜12、日: 01〜31）。さらにカレンダー上の実在日チェック（2月30日やうるう年以外の2月29日などを拒否）を実施。
-- **会計月 (`fiscal_month`)**: `YYYY-MM` 形式（01〜12月）。家計簿の締め日ルールに基づき、**毎月 23 日から翌月 22 日** が同一会計月となります（例: 2026-03-23 の支出は会計月 `2026-04`）。更新系ツールではサーバー側で自動計算されるため、リクエスト引数としては指定できません。
+- **会計月 (`fiscal_month`)**: `YYYY-MM` 形式（01〜12月）。家計簿の締め日ルールに基づき、**毎月 23 日から翌月 22 日** が同一会計月となります（例: 2026-03-23 の支出は会計月 `2026-04`）。汎用の更新系ツール（`create_transaction` 等）では日付からサーバー側で自動計算されるため、リクエスト引数としては指定できません。固定費・給与の専用ツール（`set_fixed_cost_cell` / `add_salary_item`）は会計月を直接指定し、年は REST の固定入力 API と同じ 2000〜2999 年に限定されます（`2000-01` の給与日付は `1999-12-25`）。詳細は §7.5 の 5〜8 を参照してください。
 - **収支区分 (`type`)**: `'EXPENSE'` (支出) または `'INCOME'` (収入)。
 - **金額 (`amount`)**: 整数必須（小数不可）。`0` 円は指定不可。絶対値は最大 `10,000,000`（1,000万円）以内。
+  - **固定費・給与の専用ツールの例外**: `set_fixed_cost_cell` は 0 以上（`0` はセル削除）、給与ツール（`add_salary_item` / `update_salary_item`）は 1 以上で、いずれも負数は指定できません（上限は同じ 1,000 万円）。
   - **負数の扱い**: 割引・値引き・クーポン等のマイナス金額は `type: 'EXPENSE'` のみ許可されます。`type: 'INCOME'` で負数を指定した場合はエラーとなります。
 - **品名・内容 (`description`)**: 1〜200 文字の文字列。
 - **メモ (`memo`)**: 最大 500 文字（任意）。
@@ -463,9 +465,9 @@ MCP プロトコル仕様に準拠し、すべてのツール実行結果は以�
 
 ---
 
-### 7.5 更新系ツール (4ツール)
+### 7.5 更新系ツール (8ツール)
 
-更新系ツールはデータベースの取引明細レコードを作成・更新・削除します。
+更新系ツールはデータベースの取引明細レコードを作成・更新・削除します。1〜4 は通常の取引明細を扱う汎用ツールで、固定費・給与の書き込みは拒否します（§7.6）。5〜8 は固定費・給与の専用ツールで、固定入力画面（[3. 毎月の固定入力](#3-毎月の固定入力収入支出-fixedcostmanagervue)）と同じ前提で書き込み、REST の `/api/fixed_costs` と同じサービス層（`server/services/fixedCostService.js`）を使います。
 
 #### 1. `create_transaction`
 
@@ -637,11 +639,144 @@ MCP プロトコル仕様に準拠し、すべてのツール実行結果は以�
   }
   ```
 
+#### 5. `set_fixed_cost_cell`
+
+固定入力画面の固定費（支出）セル 1 つの金額を設定します。固定費は `(fiscal_month, category_code, type=EXPENSE)` ごとに 1 明細として管理され、既存行があれば更新、なければ作成し、金額 `0` でセルを削除します。現在値は `get_fixed_costs` で確認できます。
+
+- **アノテーション**: `destructiveHint: true, idempotentHint: true`
+- **入力パラメータ**:
+  | 引数名          | 型      | 必須 | 既定値 | 制約・説明                                            |
+  | --------------- | ------- | ---- | ------ | ----------------------------------------------------- |
+  | `fiscal_month`  | string  | 必須 | -      | 会計月 (`YYYY-MM`、2000〜2999 年)                     |
+  | `category_code` | integer | 必須 | -      | 固定費の費目コード（`601`〜`608`, `901`）             |
+  | `amount`        | integer | 必須 | -      | 金額（0 以上の整数、1,000万円以内）。`0` はセルの削除 |
+- **保存規則**:
+  - 収支区分は常に `EXPENSE` で、引数では指定しません。
+  - 作成・更新時の `date` は会計月の 1 日（`YYYY-MM-01`）、`description` は `固定費入力` に設定します（固定入力画面と同じ）。
+  - 対象セルの読み取りから書き込みまでを直列化キュー＋専用接続＋`BEGIN IMMEDIATE` で実行するため、同じセルへ同時に呼び出しても重複行はできません。
+  - 対象セルに既存行が複数ある場合（Excel インポート由来など）は更新せずエラーにします。固定入力画面で整理してから再実行してください。
+- **出力形式**:
+  ```json
+  {
+    "status": "updated",
+    "fiscal_month": "2026-04",
+    "category_code": 604,
+    "amount": 85000,
+    "previous_amount": 80000,
+    "id": 120,
+    "transaction": {
+      "id": 120,
+      "date": "2026-04-01",
+      "fiscal_month": "2026-04",
+      "amount": 85000,
+      "type": "EXPENSE",
+      "category_code": 604,
+      "category_name": "家賃",
+      "description": "固定費入力",
+      "memo": null
+    }
+  }
+  ```
+  - `status`: `created`（新規作成）/ `updated`（既存行を更新）/ `deleted`（金額 0 で削除）/ `ignored`（金額 0 で対象行なし）
+  - `previous_amount`: 変更前の金額（対象行がなかった場合は `null`）
+  - `id`: 作成・更新・削除した明細の ID（`ignored` のときは含まれません）
+  - `transaction`: 作成・更新後の明細（`deleted` / `ignored` のときは含まれません）
+- **エラー条件**:
+  - 給与コード `700` の指定（`給与は add_salary_item / update_salary_item / delete_salary_item を使ってください`）
+  - 固定費コード以外の指定（`固定費コードではありません（601〜608, 901）。通常の明細は create_transaction を使ってください: <code>`）
+  - 費目がカテゴリマスタに存在しない（`存在しない費目コードです: <code>`）
+  - 対象セルに既存行が複数ある（`同じ会計月・費目の固定費明細が複数あります（ID: <id>, <id>）。固定入力画面で整理してください`）
+  - 負数・小数・上限超過の金額、不正な会計月形式、2000〜2999 年以外の会計月（入力スキーマ違反）
+- **呼び出し例**:
+  ```json
+  {
+    "fiscal_month": "2026-04",
+    "category_code": 604,
+    "amount": 85000
+  }
+  ```
+
+#### 6. `add_salary_item`
+
+給与（`type=INCOME` / `category_code=700`）の明細を 1 件追加します。同じ会計月に複数の明細を登録できます。
+
+- **アノテーション**: `destructiveHint: false`
+- **入力パラメータ**:
+  | 引数名         | 型      | 必須 | 既定値           | 制約・説明                          |
+  | -------------- | ------- | ---- | ---------------- | ----------------------------------- |
+  | `fiscal_month` | string  | 必須 | -                | 会計月 (`YYYY-MM`、2000〜2999 年)   |
+  | `amount`       | integer | 必須 | -                | 金額（1 以上の整数、1,000万円以内） |
+  | `description`  | string  | 任意 | `給与(固定入力)` | 摘要（1〜200文字）                  |
+- **保存規則**: `date` は対象会計月の前月 25 日（例: `2026-05` → `2026-04-25`、`2027-01` → `2026-12-25`）に自動設定します。25 日は会計月の切替（23 日）より後なので、`date` から算出される会計月は指定した `fiscal_month` と一致します。
+- **出力形式**: 作成された明細（`id`, `date`, `fiscal_month`, `amount`, `type`, `category_code`, `category_name`, `description`, `memo`）。
+- **エラー条件**: 0 以下・小数・上限超過の金額、空文字または 201 文字以上の摘要、不正な会計月形式、2000〜2999 年以外の会計月（入力スキーマ違反）。
+- **呼び出し例**:
+  ```json
+  {
+    "fiscal_month": "2026-05",
+    "amount": 300000,
+    "description": "本給"
+  }
+  ```
+
+#### 7. `update_salary_item`
+
+指定された ID の給与明細の金額・摘要を部分更新します。
+
+- **アノテーション**: `destructiveHint: true, idempotentHint: true`
+- **入力パラメータ**:
+  | 引数名        | 型      | 必須 | 既定値 | 制約・説明                          |
+  | ------------- | ------- | ---- | ------ | ----------------------------------- |
+  | `id`          | integer | 必須 | -      | 更新対象の給与明細 ID（正の整数）   |
+  | `amount`      | integer | 任意 | -      | 金額（1 以上の整数、1,000万円以内） |
+  | `description` | string  | 任意 | -      | 摘要（1〜200文字）                  |
+- **更新規則**:
+  - `amount` と `description` の少なくとも一方が必要です。指定しなかった項目は既存値のまま保持します（REST の `PUT /api/fixed_costs/salary/:id` は `amount` 必須で、摘要の省略時は既定値で上書きします）。
+  - 会計月・日付は変更できません。月を付け替える場合は `delete_salary_item` で削除してから `add_salary_item` で追加し直します。
+- **出力形式**: 更新後の明細（`add_salary_item` と同じ形）。
+- **エラー条件**:
+  - 更新項目の未指定（`更新項目が指定されていません（amount または description を指定してください）`）
+  - 存在しない ID、または給与以外の明細の ID（`指定された給与明細が見つかりません: <id>`）
+- **呼び出し例**:
+  ```json
+  {
+    "id": 130,
+    "amount": 310000
+  }
+  ```
+
+#### 8. `delete_salary_item`
+
+指定された ID の給与明細を削除します。誤削除防止のため確認フラグが必須です。
+
+- **アノテーション**: `destructiveHint: true`
+- **入力パラメータ**:
+  | 引数名    | 型      | 必須 | 既定値 | 制約・説明                               |
+  | --------- | ------- | ---- | ------ | ---------------------------------------- |
+  | `id`      | integer | 必須 | -      | 削除対象の給与明細 ID（正の整数）        |
+  | `confirm` | boolean | 必須 | -      | 削除確認フラグ。リテラル `true` のみ許可 |
+- **出力形式**:
+  ```json
+  {
+    "deleted_transaction": { "...削除された給与明細..." }
+  }
+  ```
+- **エラー条件**:
+  - `confirm: true` が指定されていない場合
+  - 存在しない ID、または給与以外の明細の ID（`指定された給与明細が見つかりません: <id>`）
+- **呼び出し例**:
+  ```json
+  {
+    "id": 130,
+    "confirm": true
+  }
+  ```
+
 ---
 
 ### 7.6 固定費・給与の保護ルール
 
-家計簿アプリ Gravity では、毎月の固定費（公共料金や家賃）および固定収入（給与）をマトリクス画面（[3. 毎月の固定入力](#3-毎月の固定入力収入支出-fixedcostmanagervue)）で一括管理しています。整合性を維持するため、リモート MCP からの直接変更は禁止されています。
+家計簿アプリ Gravity では、毎月の固定費（公共料金や家賃）および固定収入（給与）をマトリクス画面（[3. 毎月の固定入力](#3-毎月の固定入力収入支出-fixedcostmanagervue)）で一括管理しています。マトリクスは「固定費は会計月・費目ごとに 1 明細」「給与は 1 会計月に複数明細、日付は前月 25 日」という前提で動くため、汎用の更新系ツール（`create_transaction` / `create_transactions_batch` / `update_transaction` / `delete_transaction`）では固定費・給与の書き込みを拒否し、エラーメッセージで専用ツール（固定費: `set_fixed_cost_cell`、給与: `add_salary_item` / `update_salary_item` / `delete_salary_item`）へ誘導します。専用ツールはこの前提を守って書き込みます（§7.5 の 5〜8）。
 
 #### 対象費目コード
 
@@ -654,13 +789,15 @@ MCP プロトコル仕様に準拠し、すべてのツール実行結果は以�
 
 #### ガード動作と返却メッセージ一覧
 
-| 操作                                   | 条件                                 | 返却エラーメッセージ                                                               |
-| -------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------- |
-| 単件登録 (`create_transaction`)        | 固定費または給与コードを指定         | `固定費・給与の登録は固定入力画面を使ってください`                                 |
-| 一括登録 (`create_transactions_batch`) | 明細内に固定費または給与コードを含む | `[N行目] items[i].category_code: 固定費・給与の登録は固定入力画面を使ってください` |
-| 明細更新 (`update_transaction`)        | 既存レコードが固定費または給与明細   | `固定費・給与の明細は更新できません（固定入力画面を使ってください）`               |
-| 明細更新 (`update_transaction`)        | 通常明細を固定費・給与コードへ変更   | `固定費・給与のカテゴリへの変更はできません（固定入力画面を使ってください）`       |
-| 明細削除 (`delete_transaction`)        | 既存レコードが固定費または給与明細   | `固定費・給与の明細は削除できません（固定入力画面を使ってください）`               |
+汎用ツールのエラーメッセージは、いずれも末尾に専用ツールの案内（`固定費・給与は専用ツールを使ってください（固定費: set_fixed_cost_cell、給与: add_salary_item / update_salary_item / delete_salary_item）`）を含みます。
+
+| 操作                                   | 条件                                 | 返却エラーメッセージ                                                                                                                                                                                       |
+| -------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 単件登録 (`create_transaction`)        | 固定費または給与コードを指定         | `固定費・給与の登録はできません。固定費・給与は専用ツールを使ってください（固定費: set_fixed_cost_cell、給与: add_salary_item / update_salary_item / delete_salary_item）`                                 |
+| 一括登録 (`create_transactions_batch`) | 明細内に固定費または給与コードを含む | `[N行目] items[i].category_code: 固定費・給与の登録はできません。固定費・給与は専用ツールを使ってください（固定費: set_fixed_cost_cell、給与: add_salary_item / update_salary_item / delete_salary_item）` |
+| 明細更新 (`update_transaction`)        | 既存レコードが固定費または給与明細   | `固定費・給与の明細は更新できません。固定費・給与は専用ツールを使ってください（固定費: set_fixed_cost_cell、給与: add_salary_item / update_salary_item / delete_salary_item）`                             |
+| 明細更新 (`update_transaction`)        | 通常明細を固定費・給与コードへ変更   | `固定費・給与のカテゴリへの変更はできません。固定費・給与は専用ツールを使ってください（固定費: set_fixed_cost_cell、給与: add_salary_item / update_salary_item / delete_salary_item）`                     |
+| 明細削除 (`delete_transaction`)        | 既存レコードが固定費または給与明細   | `固定費・給与の明細は削除できません。固定費・給与は専用ツールを使ってください（固定費: set_fixed_cost_cell、給与: add_salary_item / update_salary_item / delete_salary_item）`                             |
 
 ※ なお、参照系ツール（`get_transactions` 等）での固定費データの閲覧は許可されています（`include_fixed: false` を指定すれば除外可能です）。
 
@@ -697,7 +834,12 @@ HTTP 200 レスポンス内の `result.isError: true` と共に返却される�
 - `取引ID <id> の取引明細は見つかりませんでした。`（単件取得 `get_transaction` で対象不在時）
 - `指定された取引IDが見つかりません: <id>`（明細更新 `update_transaction` または削除 `delete_transaction` で対象不在時）
 - `更新項目が指定されていません`（`update_transaction` で更新フィールド未指定時）
-- `削除を実行するには confirm: true を指定してください`（`delete_transaction` で確認未指定時）
+- `削除を実行するには confirm: true を指定してください`（`delete_transaction` / `delete_salary_item` で確認未指定時）
+- `給与は add_salary_item / update_salary_item / delete_salary_item を使ってください`（`set_fixed_cost_cell` で給与コード 700 指定時）
+- `固定費コードではありません（601〜608, 901）。通常の明細は create_transaction を使ってください: <code>`（`set_fixed_cost_cell` で固定費以外のコード指定時）
+- `同じ会計月・費目の固定費明細が複数あります（ID: <id>, <id>）。固定入力画面で整理してください`（`set_fixed_cost_cell` で対象セルに既存行が複数ある場合）
+- `指定された給与明細が見つかりません: <id>`（`update_salary_item` / `delete_salary_item` で対象不在、または給与以外の明細を指定した場合）
+- `更新項目が指定されていません（amount または description を指定してください）`（`update_salary_item` で更新項目未指定時）
 - `収入に負の金額は指定できません（割引は支出のみ対応しています）`（収入でのマイナス金額指定時）
 - `金額に0は指定できません`（0円指定時）
 - `金額は絶対値1,000万円以内で指定してください`（上限超過時）

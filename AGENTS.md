@@ -57,7 +57,8 @@ PR のタイトル・本文、Issue、コミットメッセージ、AGENTS.md、
 - Excel インポートやリストアは既存データを削除・上書きする経路があります。実データで試す前に必ずバックアップを取ってください。
 - `/mcp` の既定は Bearer 認証（`MCP_AUTH_MODE=token`）です。`MCP_AUTH_MODE=none` を明示したときだけ無認証になり、不正値は `token` 扱いです。`token` モードで `MCP_AUTH_TOKEN` 未設定または 16 文字未満の場合は 503（fail-closed）を返します。
 - 外部公開（トンネルやリバースプロキシ）時は、ポート 3001 全体を公開すると認証のない既存 `/api/*` が無防備に公開されるため、必ず `/mcp` のみ転送対象に限定してください。
-- MCP の更新系ツールは固定費・給与（EXPENSE 601〜608/901、INCOME 700）を登録・更新・削除できません。ガードは `server/lib/fixedCostCodes.js` の `isFixedCost(code, type)` で判定します。
+- MCP の汎用更新ツール（`create_transaction` / `create_transactions_batch` / `update_transaction` / `delete_transaction`）は固定費・給与（EXPENSE 601〜608/901、INCOME 700）の登録・更新・削除を拒否し、エラーメッセージで専用ツールへ誘導します。ガードは `server/lib/fixedCostCodes.js` の `isFixedCost(code, type)` で判定します。
+- 固定費・給与は MCP の専用ツール（固定費: `set_fixed_cost_cell`、給与: `add_salary_item` / `update_salary_item` / `delete_salary_item`）で操作します。書き込みロジックは `server/services/fixedCostService.js` に集約し、REST の `/api/fixed_costs`（`update_cell`・給与専用エンドポイント）と共有しています。REST のレスポンス形を変える場合は MCP 側への影響も確認してください。
 - `create_transactions_batch` は全件検証後に単一トランザクションで登録するため、1 件でも検証エラーがあると全体がロールバックされます（部分登録なし）。
 - 取引データの `fiscal_month` は、MCP 経由の登録・更新時も `server/lib/fiscalMonth.js` により日付から自動計算されます。
 - `MCP_AUTH_TOKEN` などのトークン実値をログ・コミット・Issue・PR に絶対に記載しないでください。

@@ -11,7 +11,8 @@ const {
 const { insertOne, insertBatch, updateById, deleteById } = require('../services/transactions')
 
 /**
- * 更新系ツール (4ツール) を MCP サーバーに登録する
+ * 汎用の更新系ツール (4ツール) を MCP サーバーに登録する
+ * 固定費・給与の書き込みは専用ツール（tools/fixedCosts.js）で行う
  * @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} server
  * @param {import('sqlite3').Database} db
  */
@@ -21,7 +22,8 @@ function registerWriteTools(server, db) {
     'create_transaction',
     {
       title: '取引明細の登録',
-      description: '家計簿に新しい取引明細を1件登録します。固定費・給与コードは登録できません。',
+      description:
+        '家計簿に新しい取引明細を1件登録します。固定費・給与コードは登録できません（固定費は set_fixed_cost_cell、給与は add_salary_item を使ってください）。',
       inputSchema: {
         date: dateSchema.describe('取引日（YYYY-MM-DD）'),
         amount: amountSchema.describe('金額（0円不可、割引等のマイナスは支出のみ指定可能）'),
@@ -121,7 +123,7 @@ function registerWriteTools(server, db) {
     {
       title: '取引明細の更新',
       description:
-        '指定された取引IDの明細を更新します。日付変更時は会計月が自動再計算されます。固定費・給与明細の更新はできません。',
+        '指定された取引IDの明細を更新します。日付変更時は会計月が自動再計算されます。固定費・給与明細の更新はできません（固定費は set_fixed_cost_cell、給与は update_salary_item を使ってください）。',
       inputSchema: {
         id: z
           .number()
@@ -197,7 +199,7 @@ function registerWriteTools(server, db) {
     {
       title: '取引明細の削除',
       description:
-        '指定された取引IDの明細を削除します。誤削除防止のため confirm: true の指定が必須です。固定費・給与明細の削除はできません。',
+        '指定された取引IDの明細を削除します。誤削除防止のため confirm: true の指定が必須です。固定費・給与明細の削除はできません（固定費は set_fixed_cost_cell に金額 0、給与は delete_salary_item を使ってください）。',
       inputSchema: {
         id: z
           .number()
