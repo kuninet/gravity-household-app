@@ -13,6 +13,10 @@ const { createDbAsync } = require('../../server/lib/dbAsync')
 
 const TEST_TOKEN = 'test-mcp-valid-token-32-characters-long!'
 
+// 汎用ツールの固定費・給与ガードが専用ツールを案内するメッセージ
+const DEDICATED_TOOL_GUIDE_RE =
+  /固定費・給与は専用ツールを使ってください（固定費: set_fixed_cost_cell、給与: add_salary_item \/ update_salary_item \/ delete_salary_item）/
+
 /**
  * テスト用ヘルパー: 一時DBとMCPクライアントを立ち上げる
  */
@@ -275,7 +279,7 @@ test('C3: 金額0円、小数金額、1000万超、不正日付、存在しな�
   }
 })
 
-// C4: 固定費コード（604等）や給与コード（700）の登録が拒否されること（「固定入力画面を使ってください」）
+// C4: 固定費コード（604等）や給与コード（700）の登録が拒否され、専用ツールが案内されること
 test('C4: 固定費コード（604等）や給与コード（700）の登録が拒否されること', async () => {
   const env = await setupTestEnvironment()
   try {
@@ -291,7 +295,7 @@ test('C4: 固定費コード（604等）や給与コード（700）の登録が�
       },
     })
     assert.equal(resFixed.isError, true, '固定費の登録は拒否されること')
-    assert.match(resFixed.content[0].text, /固定入力画面を使ってください/)
+    assert.match(resFixed.content[0].text, DEDICATED_TOOL_GUIDE_RE)
 
     // 給与（700: 給与）
     const resSalary = await env.client.callTool({
@@ -305,7 +309,7 @@ test('C4: 固定費コード（604等）や給与コード（700）の登録が�
       },
     })
     assert.equal(resSalary.isError, true, '給与の登録は拒否されること')
-    assert.match(resSalary.content[0].text, /固定入力画面を使ってください/)
+    assert.match(resSalary.content[0].text, DEDICATED_TOOL_GUIDE_RE)
 
     // DB に1行も挿入されていないこと
     const countRow = await env.dbAsync.get('SELECT COUNT(*) as count FROM transactions')
@@ -419,7 +423,7 @@ test('C7: 固定費・給与行に対する更新・削除が拒否されるこ�
       arguments: { id: fixedId, amount: 85000 },
     })
     assert.equal(updateFixedRes.isError, true, '固定費行の更新は拒否されること')
-    assert.match(updateFixedRes.content[0].text, /固定入力画面を使ってください/)
+    assert.match(updateFixedRes.content[0].text, DEDICATED_TOOL_GUIDE_RE)
 
     // (b) 給与行の更新拒否
     const updateSalaryRes = await env.client.callTool({
@@ -427,7 +431,7 @@ test('C7: 固定費・給与行に対する更新・削除が拒否されるこ�
       arguments: { id: salaryId, amount: 350000 },
     })
     assert.equal(updateSalaryRes.isError, true, '給与行の更新は拒否されること')
-    assert.match(updateSalaryRes.content[0].text, /固定入力画面を使ってください/)
+    assert.match(updateSalaryRes.content[0].text, DEDICATED_TOOL_GUIDE_RE)
 
     // (c) 通常行のカテゴリを固定費コードに変更する更新拒否
     const changeToFixedRes = await env.client.callTool({
@@ -435,7 +439,7 @@ test('C7: 固定費・給与行に対する更新・削除が拒否されるこ�
       arguments: { id: normalId, category_code: 604 },
     })
     assert.equal(changeToFixedRes.isError, true, '固定費カテゴリへの変更は拒否されること')
-    assert.match(changeToFixedRes.content[0].text, /固定入力画面を使ってください/)
+    assert.match(changeToFixedRes.content[0].text, DEDICATED_TOOL_GUIDE_RE)
 
     // (d) 固定費行の削除拒否
     const deleteFixedRes = await env.client.callTool({
@@ -443,7 +447,7 @@ test('C7: 固定費・給与行に対する更新・削除が拒否されるこ�
       arguments: { id: fixedId, confirm: true },
     })
     assert.equal(deleteFixedRes.isError, true, '固定費行の削除は拒否されること')
-    assert.match(deleteFixedRes.content[0].text, /固定入力画面を使ってください/)
+    assert.match(deleteFixedRes.content[0].text, DEDICATED_TOOL_GUIDE_RE)
 
     // (e) 給与行の削除拒否
     const deleteSalaryRes = await env.client.callTool({
@@ -451,7 +455,7 @@ test('C7: 固定費・給与行に対する更新・削除が拒否されるこ�
       arguments: { id: salaryId, confirm: true },
     })
     assert.equal(deleteSalaryRes.isError, true, '給与行の削除は拒否されること')
-    assert.match(deleteSalaryRes.content[0].text, /固定入力画面を使ってください/)
+    assert.match(deleteSalaryRes.content[0].text, DEDICATED_TOOL_GUIDE_RE)
   } finally {
     await env.teardown()
   }
@@ -582,7 +586,7 @@ test('D2: バッチ登録中に複数行に不正がある場合、全行チェ�
     assert.match(errText, /items\[1\]\.category_code: 存在しない費目コードです \(99999\)/)
     assert.match(
       errText,
-      /items\[2\]\.category_code: 固定費・給与の登録は固定入力画面を使ってください/
+      /items\[2\]\.category_code: 固定費・給与の登録はできません。固定費・給与は専用ツールを使ってください/
     )
 
     // DB に 1 行も挿入されていないこと
