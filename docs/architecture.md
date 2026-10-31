@@ -58,14 +58,16 @@
 │   │   ├── auth.js         # タイミング攻撃対策 Bearer 認証ミドルウェア
 │   │   ├── server.js       # McpServer インスタンス生成とツール登録
 │   │   ├── schemas.js      # Zod による共通バリデーションスキーマ
-│   │   ├── tools/          # ツール定義 (read.js: 参照7ツール, write.js: 更新4ツール)
+│   │   ├── tools/          # ツール定義 (read.js: 参照7ツール, write.js: 汎用更新4ツール, fixedCosts.js: 固定費・給与の専用更新4ツール)
 │   │   └── services/       # MCP 専用サービス層 (transactions.js: 明細取得・登録・一括登録)
 │   ├── services/           # REST / MCP 共有ビジネスロジックサービス層
 │   │   ├── summaryService.js    # 月次サマリ・カテゴリ内訳・前月比較計算
-│   │   ├── fixedCostService.js  # 年間固定費・固定収入マトリクスデータ取得
+│   │   ├── fixedCostService.js  # 年間固定費・固定収入マトリクスデータ取得、固定費セル・給与明細の書き込み
 │   │   └── priceTrendService.js # キーワード価格推移・統計分析 (Jev/Simple)
 │   ├── lib/                # 共通ライブラリ・ユーティリティ
 │   │   ├── dbAsync.js           # SQLite 非同期 (Promise) ラッパー
+│   │   ├── dbTransaction.js     # 書き込みトランザクションの直列化キュー・専用接続
+│   │   ├── transactionRow.js    # 取引明細 1 行の返却形（category_name 付き）を取得する共通 SQL
 │   │   ├── fiscalMonth.js       # 23日締め会計月計算ユーティリティ
 │   │   ├── fixedCostCodes.js    # 固定費・給与コード定義と判定関数
 │   │   ├── jevService.js        # TypeSafe AI Jev 連携
@@ -230,4 +232,4 @@ sequenceDiagram
 2. **CORS 適用前の先行マウント**:
    - `/mcp` エンドポイントは、Express アプリケーション内で `cors()` ミドルウェアより前にマウントしています。ブラウザからの直接利用は想定しておらず、主に AI エージェント等のバックエンド・CLI クライアントからの接続を想定しています。
 3. **ビジネスロジックの共有**:
-   - 月次サマリ計算（`summaryService.js`）、固定費データ取得（`fixedCostService.js`）、物価分析（`priceTrendService.js`）、23日締め会計月計算（`fiscalMonth.js`）、固定費コード判定（`fixedCostCodes.js`）は独立したサービス/ライブラリ層として分離されており、REST API ルートと MCP ツール実装の両方から共通利用されています。これにより、計算ロジックや整合性ルールの二重管理を防止しています。
+   - 月次サマリ計算（`summaryService.js`）、固定費データの取得・固定費セルと給与明細の書き込み（`fixedCostService.js`）、物価分析（`priceTrendService.js`）、23日締め会計月計算（`fiscalMonth.js`）、固定費コード判定（`fixedCostCodes.js`）は独立したサービス/ライブラリ層として分離されており、REST API ルートと MCP ツール実装の両方から共通利用されています。これにより、計算ロジックや整合性ルールの二重管理を防止しています。
