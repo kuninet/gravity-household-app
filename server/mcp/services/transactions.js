@@ -1,50 +1,8 @@
-const path = require('path')
-const sqlite3 = require('sqlite3')
 const { createDbAsync } = require('../../lib/dbAsync')
+const { withTxLock, openBatchConnection } = require('../../lib/dbTransaction')
+const { selectTransactionRow } = require('../../lib/transactionRow')
 const { isFixedCost, EXPENSE_FIXED_CODES, INCOME_FIXED_CODES } = require('../../lib/fixedCostCodes')
 const { getFiscalMonth, isValidDateString } = require('../../lib/fiscalMonth')
-
-let txLock = Promise.resolve()
-
-/**
- * トランザクション直列化のための非同期ミューテックス
- * @template T
- * @param {() => Promise<T>} fn
- * @returns {Promise<T>}
- */
-function withTxLock(fn) {
-  const nextLock = txLock.then(async () => {
-    return await fn()
-  })
-  txLock = nextLock.catch(() => {})
-  return nextLock
-}
-
-/**
- * 一括登録用の独立した SQLite 接続を取得する（ファイル DB の場合は独立接続、:memory: の場合は共有 db を再利用）
- * @param {import('sqlite3').Database} db
- * @returns {Promise<{ batchDb: import('sqlite3').Database, isDedicated: boolean }>}
- */
-async function openBatchConnection(db) {
-  const dbPath =
-    db && db.filename
-      ? db.filename
-      : process.env.DB_PATH || path.join(__dirname, '../../household.db')
-  if (!dbPath || dbPath === ':memory:') {
-    return { batchDb: db, isDedicated: false }
-  }
-
-  const batchDb = new sqlite3.Database(dbPath)
-  try {
-    await new Promise((resolve, reject) => {
-      batchDb.run('PRAGMA busy_timeout = 5000', (err) => (err ? reject(err) : resolve()))
-    })
-    return { batchDb, isDedicated: true }
-  } catch (err) {
-    await new Promise((resolve) => batchDb.close(resolve))
-    throw err
-  }
-}
 
 /**
  * 全カテゴリを取得し、固定費フラグを付与して返す
@@ -191,24 +149,7 @@ async function getTransaction(db, id) {
   if (id === undefined || id === null) {
     return null
   }
-  const dbAsync = createDbAsync(db)
-  const sql = `
-    SELECT 
-      t.id,
-      t.date,
-      t.fiscal_month,
-      t.amount,
-      t.type,
-      t.category_code,
-      c.name as category_name,
-      t.description,
-      t.memo
-    FROM transactions t
-    LEFT JOIN categories c ON t.category_code = c.code
-    WHERE t.id = ?
-  `
-  const row = await dbAsync.get(sql, [id])
-  return row || null
+  return await selectTransactionRow(createDbAsync(db), id)
 }
 
 /**
@@ -251,7 +192,9 @@ async function insertOne(db, tx) {
 
   // 固定費・給与ガード (isFixedCost)
   if (isFixedCost(parsedCatCode, type)) {
-    throw new Error('固定費・給与の登録は固定入力画面を使ってください')
+    throw new Error(
+      '固定費・給与の登録はできません。固定費・給与は専用ツールを使ってください（固定費: set_fixed_cost_cell、給与: add_salary_item / update_salary_item / delete_salary_item）'
+    )
   }
 
   const dbAsync = createDbAsync(db)
@@ -345,7 +288,9 @@ async function insertBatch(db, { date, store, items, dry_run = false } = {}) {
     if (!catCode || !categoryMap.has(catCode)) {
       errors.push(`${prefix}.category_code: 存在しない費目コードです (${item.category_code})`)
     } else if (isFixedCost(catCode, itemType)) {
-      errors.push(`${prefix}.category_code: 固定費・給与の登録は固定入力画面を使ってください`)
+      errors.push(
+        `${prefix}.category_code: 固定費・給与の登録はできません。固定費・給与は専用ツールを使ってください（固定費: set_fixed_cost_cell、給与: add_salary_item / update_salary_item / delete_salary_item）`
+      )
     }
 
     if (!item.description || typeof item.description !== 'string' || !item.description.trim()) {
@@ -486,7 +431,9 @@ async function updateById(db, id, fields = {}) {
 
   // 固定費ガード: 既存行が固定費・給与なら更新拒否
   if (isFixedCost(existing.category_code, existing.type)) {
-    throw new Error('固定費・給与の明細は更新できません（固定入力画面を使ってください）')
+    throw new Error(
+      '固定費・給与の明細は更新できません。固定費・給与は専用ツールを使ってください（固定費: set_fixed_cost_cell、給与: add_salary_item / update_salary_item / delete_salary_item）'
+    )
   }
 
   const targetType = fields.type !== undefined ? fields.type : existing.type
@@ -496,7 +443,9 @@ async function updateById(db, id, fields = {}) {
   // 固定費ガード: 変更先が固定費・給与なら更新拒否
   if (fields.category_code !== undefined || fields.type !== undefined) {
     if (isFixedCost(targetCategoryCode, targetType)) {
-      throw new Error('固定費・給与のカテゴリへの変更はできません（固定入力画面を使ってください）')
+      throw new Error(
+        '固定費・給与のカテゴリへの変更はできません。固定費・給与は専用ツールを使ってください（固定費: set_fixed_cost_cell、給与: add_salary_item / update_salary_item / delete_salary_item）'
+      )
     }
   }
 
@@ -593,7 +542,9 @@ async function deleteById(db, id) {
 
   // 固定費ガード
   if (isFixedCost(existing.category_code, existing.type)) {
-    throw new Error('固定費・給与の明細は削除できません（固定入力画面を使ってください）')
+    throw new Error(
+      '固定費・給与の明細は削除できません。固定費・給与は専用ツールを使ってください（固定費: set_fixed_cost_cell、給与: add_salary_item / update_salary_item / delete_salary_item）'
+    )
   }
 
   const dbAsync = createDbAsync(db)

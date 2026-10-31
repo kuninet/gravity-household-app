@@ -3,36 +3,19 @@ const router = express.Router()
 const db = require('../db')
 
 // 給与・固定費関連の定数は fixedCostCodes に集約
+const { isFixedIncome } = require('../lib/fixedCostCodes')
+// 書き込みロジックは fixedCostService に集約し、MCP の専用ツールと共有する
 const {
-  SALARY_CATEGORY_CODE,
-  SALARY_TYPE,
-  SALARY_DEFAULT_DESCRIPTION,
-  SALARY_DESCRIPTION_MAX_LENGTH,
-  isFixedIncome,
-} = require('../lib/fixedCostCodes')
-const { getFixedCostMatrix } = require('../services/fixedCostService')
-
-// INSERT 時の date を決定する。
-// EXPENSE: 会計月の 01 日 (現行踏襲)。
-// INCOME: 会計月の前月 25 日。25 日は fiscal_month の切替 (23 日基点) の後側なので
-// getFiscalMonth(date) と fiscal_month が一致する。
-function resolveInsertDate(fiscalMonth, type) {
-  if (type === 'INCOME') {
-    const [y, m] = fiscalMonth.split('-').map(Number)
-    let py = y
-    let pm = m - 1
-    if (pm < 1) {
-      pm = 12
-      py -= 1
-    }
-    return `${py}-${String(pm).padStart(2, '0')}-25`
-  }
-  return `${fiscalMonth}-01`
-}
-
-function resolveDescription(type) {
-  return type === 'INCOME' ? SALARY_DEFAULT_DESCRIPTION : '固定費入力'
-}
+  getFixedCostMatrix,
+  setFixedCostCell,
+  addSalaryItem,
+  updateSalaryItem,
+  deleteSalaryItem,
+  resolveInsertDate,
+  resolveDescription,
+  normalizeSalaryDescription,
+  isClearAmount,
+} = require('../services/fixedCostService')
 
 function isPositiveInt(v) {
   return Number.isInteger(v) && v > 0
@@ -44,15 +27,6 @@ function isValidMonth(v) {
 
 function isValidYear(v) {
   return Number.isInteger(v) && v >= 2000 && v <= 2999
-}
-
-function normalizeSalaryDescription(desc) {
-  if (desc === undefined || desc === null || desc === '') {
-    return SALARY_DEFAULT_DESCRIPTION
-  }
-  if (typeof desc !== 'string') return null
-  if (desc.length > SALARY_DESCRIPTION_MAX_LENGTH) return null
-  return desc
 }
 
 // リクエスト body の amount を数値に正規化する。
@@ -81,7 +55,7 @@ router.get('/matrix', async (req, res) => {
 })
 
 // Bulk update/insert for a specific cell (Year-Month + Category)
-router.post('/update_cell', (req, res) => {
+router.post('/update_cell', async (req, res) => {
   const { year, month, category_code, amount } = req.body
   const type = req.body.type || 'EXPENSE'
 
@@ -98,50 +72,16 @@ router.post('/update_cell', (req, res) => {
 
   const fiscal_month = `${year}-${String(month).padStart(2, '0')}`
 
-  // (fiscal_month, category_code, type) で一意化。type が変わればそれは別レコード扱い
-  // (逆 type の既存行を巻き込むと Analysis/Summary で誤分類されるため)。
-  db.get(
-    'SELECT id FROM transactions WHERE fiscal_month = ? AND category_code = ? AND type = ?',
-    [fiscal_month, category_code, type],
-    (err, row) => {
-      if (err) return res.status(500).json({ error: err.message })
-
-      if (amount === '' || amount === null || amount === 0 || amount === '0') {
-        if (row) {
-          db.run('DELETE FROM transactions WHERE id = ?', [row.id], function (err) {
-            if (err) return res.status(500).json({ error: err.message })
-            res.json({ status: 'deleted' })
-          })
-        } else {
-          res.json({ status: 'ignored' })
-        }
-      } else {
-        const insertDate = resolveInsertDate(fiscal_month, type)
-        const description = resolveDescription(type)
-        if (row) {
-          // 既存行の date/description が古い type の値のまま残らないよう毎回上書き
-          db.run(
-            'UPDATE transactions SET amount = ?, date = ?, description = ? WHERE id = ?',
-            [amount, insertDate, description, row.id],
-            function (err) {
-              if (err) return res.status(500).json({ error: err.message })
-              res.json({ status: 'updated' })
-            }
-          )
-        } else {
-          db.run(
-            `INSERT INTO transactions (date, fiscal_month, amount, type, category_code, description)
-                         VALUES (?, ?, ?, ?, ?, ?)`,
-            [insertDate, fiscal_month, amount, type, category_code, description],
-            function (err) {
-              if (err) return res.status(500).json({ error: err.message })
-              res.json({ status: 'created', id: this.lastID })
-            }
-          )
-        }
-      }
+  try {
+    // REST は従来どおり amount を検証せずそのまま渡し、既存行が複数あれば先頭行を対象にする
+    const result = await setFixedCostCell(db, { fiscal_month, category_code, amount, type })
+    if (result.status === 'created') {
+      return res.json({ status: 'created', id: result.id })
     }
-  )
+    res.json({ status: result.status })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 router.post('/batch_update', async (req, res) => {
@@ -189,7 +129,7 @@ router.post('/batch_update', async (req, res) => {
         [fiscal_month, category_code, type]
       )
 
-      if (amount === '' || amount === null || amount === 0 || amount === '0') {
+      if (isClearAmount(amount)) {
         if (row) {
           await dbRun('DELETE FROM transactions WHERE id = ?', [row.id])
         }
@@ -231,7 +171,7 @@ router.post('/batch_update', async (req, res) => {
 // ---------------------------------------------------------------------------
 
 // POST /fixed_costs/salary : 給与明細を 1 行追加
-router.post('/salary', (req, res) => {
+router.post('/salary', async (req, res) => {
   const { year, month, description } = req.body || {}
 
   if (!isValidYear(year)) {
@@ -250,21 +190,17 @@ router.post('/salary', (req, res) => {
   }
 
   const fiscal_month = `${year}-${String(month).padStart(2, '0')}`
-  const insertDate = resolveInsertDate(fiscal_month, SALARY_TYPE)
 
-  db.run(
-    `INSERT INTO transactions (date, fiscal_month, amount, type, category_code, description)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-    [insertDate, fiscal_month, amount, SALARY_TYPE, SALARY_CATEGORY_CODE, desc],
-    function (err) {
-      if (err) return res.status(500).json({ error: err.message })
-      res.json({ status: 'created', id: this.lastID })
-    }
-  )
+  try {
+    const created = await addSalaryItem(db, { fiscal_month, amount, description: desc })
+    res.json({ status: 'created', id: created.id })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // PUT /fixed_costs/salary/:id : 給与明細の金額/摘要を更新 (会計月は変更不可)
-router.put('/salary/:id', (req, res) => {
+router.put('/salary/:id', async (req, res) => {
   const id = Number(req.params.id)
   if (!isPositiveInt(id)) {
     return res.status(400).json({ error: 'invalid id' })
@@ -274,55 +210,41 @@ router.put('/salary/:id', (req, res) => {
   if (amount === null) {
     return res.status(400).json({ error: 'amount must be a positive integer' })
   }
+  // REST では摘要の省略・空文字を既定値で上書きする (現行踏襲)
   const desc = normalizeSalaryDescription(description)
   if (desc === null) {
     return res.status(400).json({ error: 'description must be a string of at most 200 chars' })
   }
 
-  // 給与行以外を書き換えないよう type/category_code を検証
-  db.get('SELECT id, category_code, type FROM transactions WHERE id = ?', [id], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message })
-    if (!row || row.category_code !== SALARY_CATEGORY_CODE || row.type !== SALARY_TYPE) {
+  try {
+    // 給与行以外は null (=404)。月変更は削除+追加で行う仕様のため date/fiscal_month は触らない
+    const updated = await updateSalaryItem(db, id, { amount, description: desc })
+    if (!updated) {
       return res.status(404).json({ error: 'salary row not found' })
     }
-
-    // 月変更は削除+追加で行う仕様のため date/fiscal_month は触らない
-    db.run(
-      'UPDATE transactions SET amount = ?, description = ? WHERE id = ?',
-      [amount, desc, id],
-      function (err) {
-        if (err) return res.status(500).json({ error: err.message })
-        // SELECT 後の競合削除に備え、書換 0 行も 404 として扱う
-        if (this.changes === 0) {
-          return res.status(404).json({ error: 'salary row not found' })
-        }
-        res.json({ status: 'updated' })
-      }
-    )
-  })
+    res.json({ status: 'updated' })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // DELETE /fixed_costs/salary/:id : 給与明細を削除
-router.delete('/salary/:id', (req, res) => {
+router.delete('/salary/:id', async (req, res) => {
   const id = Number(req.params.id)
   if (!isPositiveInt(id)) {
     return res.status(400).json({ error: 'invalid id' })
   }
 
-  db.get('SELECT id, category_code, type FROM transactions WHERE id = ?', [id], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message })
-    if (!row || row.category_code !== SALARY_CATEGORY_CODE || row.type !== SALARY_TYPE) {
+  try {
+    // 給与行以外・SELECT 後の競合削除はいずれも null (=404)
+    const deleted = await deleteSalaryItem(db, id)
+    if (!deleted) {
       return res.status(404).json({ error: 'salary row not found' })
     }
-    db.run('DELETE FROM transactions WHERE id = ?', [id], function (err) {
-      if (err) return res.status(500).json({ error: err.message })
-      // SELECT 後の競合削除に備え、書換 0 行も 404 として扱う
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'salary row not found' })
-      }
-      res.json({ status: 'deleted' })
-    })
-  })
+    res.json({ status: 'deleted' })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 module.exports = router
