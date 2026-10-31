@@ -39,6 +39,17 @@ app.get('/api/health', (req, res) => {
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`)
+    const rawAuthMode = String(process.env.MCP_AUTH_MODE || '')
+      .trim()
+      .toLowerCase()
+    if (rawAuthMode && rawAuthMode !== 'token' && rawAuthMode !== 'none') {
+      console.warn('[MCP] 警告: MCP_AUTH_MODE の値が不正なため token モードとして扱います。')
+    }
+    if (require('./mcp/auth').getMcpAuthMode() === 'none') {
+      console.warn(
+        '[MCP] 警告: MCP_AUTH_MODE=none のため /mcp は認証なしで公開されています。外部公開する場合は Cloudflare Access 等の前段で接続元を制限し、MCP_ALLOWED_HOSTS を設定してください。'
+      )
+    }
   })
 }
 
